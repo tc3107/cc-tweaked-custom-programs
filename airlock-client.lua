@@ -28,6 +28,24 @@ while true do
         lastLeft = false
     end
 
+    if midIn then
+        if lastMid == false then
+            switch()
+        end
+        lastMid = true
+    else
+        lastMid = false
+    end
+
+    if rightIn then
+        if lastRight == false then
+            switch()
+        end
+        lastRight = true
+    else
+        lastRight = false
+    end
+    
     relay.setOutput('top', doorState)
     sleep(0.1)
 end
