@@ -1,61 +1,74 @@
-monitor = peripheral.wrap("monitor_1")
-relay = peripheral.wrap("redstone_relay_1")
+local airlock_name = 'main_airlock'
+
+local monitor = peripheral.wrap("monitor_1")
+local relay = peripheral.wrap("redstone_relay_1")
+rednet.open('right')
 
 term.redirect(monitor)
-monitor.setTextScale(1)
+monitor.setTextScale(0.75)
 monitor.clear()
 monitor.setCursorPos(1,1)
 
 print("Running control program...")
 
-doorState = false
-lastLeft = false
-lastMid = false
-lastRight = false
+local doorState = false
+local lastLeft = false
+local lastMid = false
+local lastRight = false
 
-function switch()
-    if doorState then
-        doorState = false
-        print("Airlock Position A - ", os.time())
+local function request()
+    local server = rednet.lookup('airlock', 'security_server')
+    if server then
+        print("Sending request...")
+        rednet.send(server, airlock_name, 'airlock')
+        local id, msg, proto = rednet.receive('airlock', 5)
+        if id == server and type(msg) == 'boolean' then
+            if msg == true then
+                print("Request approved.")
+                return true
+            elseif msg == false then
+                print("Request denied.")
+                return false
+            end
+        else
+            print("No valid response.")
+        end
     else
-        doorState = true
-        print("Airlock Position B - ", os.time())
+        print("No server found.")
     end
+    return false
+end
 
-    print("Switched Airlock State")
+local function switch()
+    if request() then
+        doorState = not doorState
+        if doorState then
+            print("Airlock Position B - ", os.time())
+        else
+            print("Airlock Position A - ", os.time())
+        end
+    end
 end
 
 while true do
-    leftIn = relay.getInput('right')
-    midIn = relay.getInput('front')
-    rightIn = relay.getInput('left')
+    local leftIn = relay.getInput('right')
+    local midIn = relay.getInput('front')
+    local rightIn = relay.getInput('left')
     
-    if leftIn then
-        if lastLeft == false then
-            switch()
-        end
-        lastLeft = true
-    else
-        lastLeft = false
+    if leftIn and not lastLeft then
+        switch()
     end
+    lastLeft = leftIn
 
-    if midIn then
-        if lastMid == false then
-            switch()
-        end
-        lastMid = true
-    else
-        lastMid = false
+    if midIn and not lastMid then
+        switch()
     end
+    lastMid = midIn
 
-    if rightIn then
-        if lastRight == false then
-            switch()
-        end
-        lastRight = true
-    else
-        lastRight = false
+    if rightIn and not lastRight then
+        switch()
     end
+    lastRight = rightIn
     
     relay.setOutput('top', doorState)
     sleep(0.1)
