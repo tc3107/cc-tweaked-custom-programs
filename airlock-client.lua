@@ -1,5 +1,7 @@
 local airlock_name = 'main_airlock'
 
+print("Starting program...")
+
 local monitor = peripheral.wrap("monitor_1")
 local relay = peripheral.wrap("redstone_relay_1")
 rednet.open('right')
