@@ -17,7 +17,7 @@ local lastMid = false
 local lastRight = false
 
 local function request()
-    local server = rednet.lookup('airlock', 'security_server')
+    local server = rednet.lookup('auth', 'airlock_control')
     if server then
         print("Sending request...")
         rednet.send(server, airlock_name, 'airlock')
