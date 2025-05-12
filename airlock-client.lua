@@ -22,8 +22,8 @@ local function request()
     local server = rednet.lookup('auth', 'airlock_control')
     if server then
         print("Sending request...")
-        rednet.send(server, airlock_name, 'airlock')
-        local id, msg, proto = rednet.receive('airlock', 5)
+        rednet.send(server, airlock_name, 'auth')
+        local id, msg, proto = rednet.receive('auth', 5)
         if id == server and type(msg) == 'boolean' then
             if msg == true then
                 print("Request approved.")
