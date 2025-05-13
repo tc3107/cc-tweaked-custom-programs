@@ -1,5 +1,5 @@
 local airlock_name = 'main_airlock'
-
+--
 print("Starting program...")
 
 local monitor = peripheral.wrap("monitor_2")
