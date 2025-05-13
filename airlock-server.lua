@@ -1,7 +1,7 @@
 print("Starting program...")
 
-local relay = peripheral.wrap('redstone_relay_2')
-rednet.open('left')
+local relay = peripheral.wrap('redstone_relay_1')
+rednet.open('back')
 rednet.host('auth', 'airlock_control')
 
 local function get_state()
