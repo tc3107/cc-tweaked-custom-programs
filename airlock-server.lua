@@ -12,9 +12,14 @@ local function get_state()
     local file = fs.open("airlock_state.txt", "r")
     local content = file.readAll()
     file.close()
-    local state = (content == "true")
-    return state
+    if string.find(content, 'true') then
+        return true
+    else
+        return false
+    end
 end
+
+print("Airlock file state: ", get_state())
 
 while true do
     local id, msg, proto = rednet.receive()
