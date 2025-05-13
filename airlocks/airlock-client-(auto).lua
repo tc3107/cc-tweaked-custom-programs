@@ -2,8 +2,8 @@ local airlock_name = 'main_airlock'
 
 print("Starting program...")
 
-local monitor = peripheral.wrap("monitor_1")
-local relay = peripheral.wrap("redstone_relay_1")
+local monitor = peripheral.wrap("monitor_2")
+local relay = peripheral.wrap("redstone_relay_4")
 rednet.open('right')
 
 term.redirect(monitor)
@@ -50,8 +50,10 @@ local function switch()
     if request() then
         print("Cycle starting - ", os.time())
         doorState = not doorState
+        update(doorState)
         sleep(cycleTime)
         doorState = not doorState
+        update(doorState)
         print("Cycle complete - ", os.time())
     end
 end
@@ -64,7 +66,5 @@ while true do
         switch()
     end
     lastIn = (leftIn or midIn)
-    
-    update(doorState)
     sleep(0.1)
 end
