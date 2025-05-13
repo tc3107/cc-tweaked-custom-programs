@@ -15,8 +15,13 @@ print("Running control program...")
 
 local doorState = false
 local lastIn = false
+local cycleTime = 2
 
-relay.setOutput('top', doorState)
+local function update(state)
+    relay.setOutput('top', state)
+end
+
+update(doorState)
 
 local function request()
     local server = rednet.lookup('auth', 'airlock_control')
@@ -43,12 +48,11 @@ end
 
 local function switch()
     if request() then
+        print("Cycle starting - ", os.time())
         doorState = not doorState
-        if doorState then
-            print("Airlock Position B - ", os.time())
-        else
-            print("Airlock Position A - ", os.time())
-        end
+        sleep(cycleTime)
+        doorState = not doorState
+        print("Cycle complete - ", os.time())
     end
 end
 
@@ -56,16 +60,11 @@ while true do
     local leftIn = relay.getInput('right')
     local midIn = relay.getInput('front')
     
-    if (leftIn and not lastLeft) or (midIn and not lastMid) then
+    if (leftIn or midIn) and not lastIn then
         switch()
     end
-    lastIn = true
-
-    if midIn and not lastMid then
-        switch()
-    end
-    lastMid = midIn
+    lastIn = (leftIn or midIn)
     
-    relay.setOutput('top', doorState)
+    update(doorState)
     sleep(0.1)
 end
