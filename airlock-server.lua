@@ -5,7 +5,7 @@ rednet.open('left')
 rednet.host('auth', 'airlock_control')
 
 local function get_state()
-    if not fs.exists("airlock_state.txt") thenst
+    if not fs.exists("airlock_state.txt") then
         print("State file inexistent.")
         return false
     end
