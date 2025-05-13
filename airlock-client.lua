@@ -1,7 +1,6 @@
 local airlock_name = 'main_airlock'
 
 print("Starting program...")
-relay.setOutput('top', doorState)
 
 local monitor = peripheral.wrap("monitor_1")
 local relay = peripheral.wrap("redstone_relay_1")
@@ -18,6 +17,8 @@ local doorState = false
 local lastLeft = false
 local lastMid = false
 local lastRight = false
+
+relay.setOutput('top', doorState)
 
 local function request()
     local server = rednet.lookup('auth', 'airlock_control')
