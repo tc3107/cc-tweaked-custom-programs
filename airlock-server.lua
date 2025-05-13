@@ -4,28 +4,30 @@ local relay = peripheral.wrap('redstone_relay_2')
 rednet.open('left')
 rednet.host('auth', 'airlock_control')
 
-local authDict = {
-    main_airlock = true
-}
-
-local function updateDict()
-    authDict["main_airlock"] = relay.getInput('right')
+local function get_state()
+    if not fs.exists("airlock_state.txt") thenst
+        print("State file inexistent.")
+        return false
+    end
+    local file = fs.open("airlock_state.txt", "r")
+    local content = file.readAll()
+    file.close()
+    local state = (content == "true")
+    return state
 end
 
 while true do
     local id, msg, proto = rednet.receive()
     if proto == 'auth' then
         print("Request received from", id, "for:", msg)
-        updateDict()
-        
-        if authDict[msg] == true then
+
+        if get_state() then
             rednet.send(id, true, 'auth')
-            print("Approved.")
-        elseif authDict[msg] == false then
-            rednet.send(id, false, 'auth')
-            print("Denied.")
+            print("Access approved.")
         else
-            print("Not found.")
+            rednet.send(id, false, 'auth')
+            print("Access denied.")
         end
     end
+    print()
 end
