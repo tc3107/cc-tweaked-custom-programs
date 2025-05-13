@@ -15,9 +15,13 @@ print("Running control program...")
 
 local doorState = false
 local lastIn = false
+local invert = true
 local cycleTime = 2
 
 local function update(state)
+    if invert then
+        state = not state
+    end
     relay.setOutput('top', state)
 end
 
