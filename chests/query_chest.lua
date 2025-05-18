@@ -1,4 +1,4 @@
--- 📡 Open rednet on all modem sides
+-- Open rednet on all sides with modems
 local sides = {"left", "right", "top", "bottom", "front", "back"}
 for _, side in ipairs(sides) do
   if peripheral.getType(side) == "modem" then
@@ -6,51 +6,66 @@ for _, side in ipairs(sides) do
   end
 end
 
--- 🧰 List of chest reader hostnames to query
+-- List of chest server hostnames
 local chestReaders = {
   "chest_reader_1",
   "chest_reader_2",
-  -- Add more if needed
+  -- Add more hostnames as needed
 }
 
 local protocol = "items"
-local timeout = 3  -- seconds
+local timeout = 5  -- seconds to wait for responses
 local combinedInventory = {}
 
--- 🛒 Function to merge inventories
+-- Add items to the combined tally
 local function addItems(source)
   for item, count in pairs(source) do
     combinedInventory[item] = (combinedInventory[item] or 0) + count
   end
 end
 
--- 🔁 Query each chest reader
-for _, reader in ipairs(chestReaders) do
-  rednet.send(reader, "get_inventory", protocol)
+-- Send query to each chest reader
+local activeReaders = {}
+for _, name in ipairs(chestReaders) do
+  local id = rednet.lookup(protocol, name)
+  if id then
+    rednet.send(id, "get_inventory", protocol)
+    activeReaders[id] = true
+  else
+    print("Could not resolve hostname:", name)
+  end
 end
 
--- ⏳ Collect responses
-local responsesExpected = #chestReaders
+-- Receive responses
+local responsesExpected = 0
+for _ in pairs(activeReaders) do
+  responsesExpected = responsesExpected + 1
+end
+
 local responsesReceived = 0
 local startTime = os.clock()
 
 while responsesReceived < responsesExpected and (os.clock() - startTime) < timeout do
-  local id, response, proto = rednet.receive(protocol, 1)
-  if response and type(response) == "table" then
+  local senderId, response, proto = rednet.receive(protocol, 1)
+  if senderId and activeReaders[senderId] and type(response) == "table" then
     addItems(response)
     responsesReceived = responsesReceived + 1
   end
 end
 
--- 📊 Sort inventory from highest to lowest count
+-- Sort the final combined inventory by count
 local sorted = {}
 for item, count in pairs(combinedInventory) do
   table.insert(sorted, {name = item, count = count})
 end
 table.sort(sorted, function(a, b) return a.count > b.count end)
 
--- 🖨️ Print results
+-- Print the result
 print("=== Combined Chest Inventory ===")
-for _, entry in ipairs(sorted) do
-  print(("%-40s x %d"):format(entry.name, entry.count))
+if #sorted == 0 then
+  print("No data received.")
+else
+  for _, entry in ipairs(sorted) do
+    print(("%-40s x %d"):format(entry.name, entry.count))
+  end
 end
