@@ -2,10 +2,10 @@
 local inputSide = "left"   -- Side where modem connects to input chests
 local outputSide = "right" -- Side where modem connects to output chests
 
--- Item routing map: item name → output chest peripheral name
+-- Item routing map: item name to output chest peripheral name
 local routes = {
-  ["minecraft:cobblestone"] = "minecraft:chest_0",
-  ["minecraft:dirt"] = "minecraft:chest_1"
+  ["minecraft:cobblestone"] = "minecraft:chest_1",
+  ["minecraft:dirt"] = "minecraft:chest_2"
   -- Add more as needed
 }
 
@@ -29,16 +29,23 @@ local function wrapInventories(modemSide)
   return chests
 end
 
--- === Sorting Logic ===
+-- === Sorting Logic with Debug ===
 
 local function sortItems(inputChests, routes)
   for _, input in ipairs(inputChests) do
+    local chestName = input.name
     local list = input.chest.list()
+    print("Scanning chest:", chestName)
+
     for slot, item in pairs(list) do
+      print(("  Slot %d: %s x%d"):format(slot, item.name, item.count))
+
       local targetName = routes[item.name]
       if targetName then
         local moved = input.chest.pushItems(targetName, slot)
-        print(("Moved %d of %s to %s"):format(moved, item.name, targetName))
+        print(("    → Moved %d to %s"):format(moved, targetName))
+      else
+        print("    → No route for this item, skipping.")
       end
     end
   end
