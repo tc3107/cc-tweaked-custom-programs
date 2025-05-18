@@ -1,3 +1,5 @@
+local hostname = "chest_reader_1" -- Make this unique
+
 -- Open all modem sides for rednet
 local sides = {"left", "right", "top", "bottom", "front", "back"}
 for _, side in ipairs(sides) do
@@ -14,7 +16,7 @@ if not chest then
 end
 
 -- Host the rednet server
-rednet.host("items", "chest_reader_1")
+rednet.host("items", hostname)
 print("Server 'chest_reader_1' is online, protocol 'items'")
 
 -- Function to get item counts
