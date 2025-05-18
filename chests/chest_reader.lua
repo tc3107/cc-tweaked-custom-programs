@@ -17,7 +17,7 @@ end
 
 -- Host the rednet server
 rednet.host("items", hostname)
-print("Server 'chest_reader_1' is online, protocol 'items'")
+print("Server ", hostname, " is online, protocol 'items'")
 
 -- Function to get item counts
 local function getInventory()
