@@ -1,7 +1,7 @@
 -- fetch.lua: Retrieve specified items from networked storage
 -- Configuration: set your desired output chest (network peripheral name)
 local outputChest = "minecraft:chest_X"
-local listLineDelay = 1
+local listLineDelay = 0.75
 
 -- Utility: trim whitespace
 local function trim(s)
@@ -20,30 +20,26 @@ local function getStoragePeripherals()
   return storage
 end
 
--- Build inventory index with precise counts
+-- Build inventory index quickly using per.list()
 -- { [itemName] = { total=N, sources={ {chest,slot,count}, ... } } }
 local function buildInventoryIndex(storagePeripherals)
   local index = {}
   local prefixSet = {}
   for _, chest in ipairs(storagePeripherals) do
     local per = peripheral.wrap(chest)
-    local size = per.size()
-    for slot = 1, size do
-      local item = per.getItemDetail(slot)
-      if item then
-        local name  = item.name
-        local count = item.count
-        -- initialize if needed
-        if not index[name] then
-          index[name] = { total = 0, sources = {} }
-        end
-        -- accumulate total and record source
-        index[name].total = index[name].total + count
-        table.insert(index[name].sources, { chest = chest, slot = slot, count = count })
-        -- collect prefix for modded lookup
-        local prefix = name:match("^(.-):")
-        if prefix then prefixSet[prefix] = true end
+    for slot, item in pairs(per.list()) do
+      local name  = item.name
+      local count = item.count
+      -- initialize if needed
+      if not index[name] then
+        index[name] = { total = 0, sources = {} }
       end
+      -- accumulate total and record source
+      index[name].total = index[name].total + count
+      table.insert(index[name].sources, { chest = chest, slot = slot, count = count })
+      -- collect prefix for modded lookup
+      local prefix = name:match("^(.-):")
+      if prefix then prefixSet[prefix] = true end
     end
   end
   -- convert prefix set into list
@@ -85,8 +81,8 @@ local function main()
   end
   local outName = outputChest
 
-  -- 3. Index items precisely
-  print("Indexing items with high precision...")
+  -- 3. Index items quickly
+  print("Indexing items quickly...")
   local index, prefixes = buildInventoryIndex(storage)
 
   -- 4. Prompt for action
@@ -141,8 +137,8 @@ local function main()
       print("Output chest is full. Stopping transfer.")
       break
     end
-    -- calculate take amount without exceeding space or needed count
-    local take = math.min(src.count, toFetch, free)
+    -- calculate take amount without exceeding needed count
+    local take = math.min(src.count, toFetch)
     local per = peripheral.wrap(src.chest)
     local ok = per.pushItems(outName, src.slot, take)
     if ok and ok > 0 then
