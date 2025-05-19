@@ -1,6 +1,10 @@
 # The overflow address is supposed to look something like:
 # overflowChest=chest_overflow
 
+# Bunker Storage
+minecraft:cobblestone=minecraft:chest_8,minecraft:chest_7,minecraft:chest_6
+minecraft:cobbled_deepslate=minecraft:chest_9,minecraft:chest_10,minecraft:chest_11
+
 # Windmill Barrels
 minecraft:wheat=minecraft:barrel_9
 minecraft:wheat_seeds=minecraft:barrel_8
