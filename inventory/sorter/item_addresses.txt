@@ -1,15 +1,18 @@
+# A normal line is supposed to look like:
+# minecraft:<name>=minecraft:chest_<num>
 # The overflow address is supposed to look something like:
 # overflowChest=chest_overflow
 
-# Bunker Storage
+# Misc
+minecraft:sand=minecraft:chest_15
+minecraft:gravel=minecraft:chest_16
+minecraft:clay=minecraft:chest_17
+
+# Stone
 minecraft:cobblestone=minecraft:chest_8,minecraft:chest_7,minecraft:chest_6
 minecraft:cobbled_deepslate=minecraft:chest_9,minecraft:chest_10,minecraft:chest_11
-minecraft:white_concrete_powder=minecraft:chest_12
-minecraft:white_concrete=minecraft:chest_12
-minecraft:light_gray_concrete_powder=minecraft:chest_13
-minecraft:light_gray_concrete=minecraft:chest_13
 
-# Windmill Barrels
+# Crops
 minecraft:wheat=minecraft:barrel_9
 minecraft:wheat_seeds=minecraft:barrel_8
 swem:oat_bushel=minecraft:barrel_6
@@ -20,3 +23,38 @@ swem:alfalfa_bushel=minecraft:barrel_2
 swem:alfalfa_seeds=minecraft:barrel_3
 supplementaries:flax=minecraft:barrel_1
 supplementaries:flax_seeds=minecraft:barrel_0
+
+# Concrete
+minecraft:white_concrete_powder=minecraft:chest_12
+minecraft:white_concrete=minecraft:chest_12
+minecraft:light_gray_concrete_powder=minecraft:chest_13
+minecraft:light_gray_concrete=minecraft:chest_13
+# All other concrete
+minecraft:black_concrete_powder=minecraft:chest_14
+minecraft:black_concrete=minecraft:chest_14
+minecraft:blue_concrete_powder=minecraft:chest_14
+minecraft:blue_concrete=minecraft:chest_14
+minecraft:brown_concrete_powder=minecraft:chest_14
+minecraft:brown_concrete=minecraft:chest_14
+minecraft:cyan_concrete_powder=minecraft:chest_14
+minecraft:cyan_concrete=minecraft:chest_14
+minecraft:gray_concrete_powder=minecraft:chest_14
+minecraft:gray_concrete=minecraft:chest_14
+minecraft:green_concrete_powder=minecraft:chest_14
+minecraft:green_concrete=minecraft:chest_14
+minecraft:light_blue_concrete_powder=minecraft:chest_14
+minecraft:light_blue_concrete=minecraft:chest_14
+minecraft:lime_concrete_powder=minecraft:chest_14
+minecraft:lime_concrete=minecraft:chest_14
+minecraft:magenta_concrete_powder=minecraft:chest_14
+minecraft:magenta_concrete=minecraft:chest_14
+minecraft:orange_concrete_powder=minecraft:chest_14
+minecraft:orange_concrete=minecraft:chest_14
+minecraft:pink_concrete_powder=minecraft:chest_14
+minecraft:pink_concrete=minecraft:chest_14
+minecraft:purple_concrete_powder=minecraft:chest_14
+minecraft:purple_concrete=minecraft:chest_14
+minecraft:red_concrete_powder=minecraft:chest_14
+minecraft:red_concrete=minecraft:chest_14
+minecraft:yellow_concrete_powder=minecraft:chest_14
+minecraft:yellow_concrete=minecraft:chest_14
