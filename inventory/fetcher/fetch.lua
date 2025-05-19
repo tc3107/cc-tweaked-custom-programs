@@ -1,7 +1,7 @@
 -- fetch.lua: Retrieve specified items from networked storage
 -- Configuration: set your desired output chest (network peripheral name)
 local outputChest = "chest_output"  -- change to your output chest peripheral name
-local listLineDelay = 0.5
+local listLineDelay = 1
 
 -- Utility: trim whitespace
 local function trim(s)
