@@ -6,6 +6,7 @@
 
 # Misc
 minecraft:sand=minecraft:chest_15
+minecraft:sandstone=minecraft:chest_15
 minecraft:gravel=minecraft:chest_16
 minecraft:clay=minecraft:chest_17
 minecraft:clay_ball=minecraft:chest_17
