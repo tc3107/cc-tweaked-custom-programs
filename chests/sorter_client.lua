@@ -2,42 +2,38 @@
 local protocol = "sort"
 local serverHostname = "inventory_control"
 
+-- List of input chests to be sorted
 local chestsToSort = {
-    "minecraft:chest_1",
-    "minecraft:chest_2"
+    "minecraft:chest_0"
     -- Add more chest IDs as needed
 }
 
 -- Open modem
-rednet.open("right")
+rednet.open("back")  -- Change side if needed
 
--- Lookup server
+-- Lookup the server by hostname
 local serverId = rednet.lookup(protocol, serverHostname)
 if not serverId then
-    print("Error: Cannot find server '" .. serverHostname .. "' on protocol '" .. protocol .. "'.")
+    print("Error: Could not find server '" .. serverHostname .. "' on protocol '" .. protocol .. "'.")
     return
 end
 
--- Send sort request
+-- Send the chest list
 rednet.send(serverId, chestsToSort, protocol)
-print("Request sent to server...")
+print("Sent sort request to server for chests:")
+for _, name in ipairs(chestsToSort) do
+    print("- " .. name)
+end
 
--- Wait for response
-local timer = os.startTimer(5)
+-- Optionally wait for an acknowledgment
+local timer = os.startTimer(3)  -- Wait up to 3 seconds
 while true do
-    local event, id, message = os.pullEvent()
-    if event == "rednet_message" and id == serverId then
-        print("Server response:")
-        if type(message) == "table" then
-            for _, line in ipairs(message) do
-                print(line)
-            end
-        else
-            print(message)
-        end
+    local event, p1, p2, p3 = os.pullEvent()
+    if event == "rednet_message" and p1 == serverId then
+        print("Server replied: " .. tostring(p2))
         break
-    elseif event == "timer" and id == timer then
-        print("No response from server.")
+    elseif event == "timer" and p1 == timer then
+        print("No reply from server, continuing anyway.")
         break
     end
 end
