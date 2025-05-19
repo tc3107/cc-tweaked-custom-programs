@@ -8,6 +8,15 @@ minecraft:sand=minecraft:chest_15
 minecraft:gravel=minecraft:chest_16
 minecraft:clay=minecraft:chest_17
 
+# Drops
+minecraft:bone=minecraft:chest_18
+minecraft:rotten_flesh=minecraft:chest_19
+minecraft:string=minecraft:chest_20
+minecraft:gunpowder=minecraft:chest_21
+minecraft:spider_eye=minecraft:chest_22
+minecraft:ender_pearl=minecraft:chest_23
+minecraft:feather=minecraft:chest_24
+
 # Stone
 minecraft:cobblestone=minecraft:chest_8,minecraft:chest_7,minecraft:chest_6
 minecraft:cobbled_deepslate=minecraft:chest_9,minecraft:chest_10,minecraft:chest_11
