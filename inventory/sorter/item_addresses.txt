@@ -1,5 +1,6 @@
 # A normal line is supposed to look like:
 # minecraft:<name>=minecraft:chest_<num>
+# Several chests can be listed on a line, seperated with ',' (no space). 
 # The overflow address is supposed to look something like:
 # overflowChest=chest_overflow
 
@@ -18,8 +19,14 @@ minecraft:ender_pearl=minecraft:chest_23
 minecraft:feather=minecraft:chest_24
 
 # Stone
-minecraft:cobblestone=minecraft:chest_8,minecraft:chest_7,minecraft:chest_6
-minecraft:cobbled_deepslate=minecraft:chest_9,minecraft:chest_10,minecraft:chest_11
+minecraft:dirt=minecraft:chest_6
+minecraft:stone=minecraft:chest_7
+minecraft:cobblestone=minecraft:chest_8
+minecraft:cobbled_deepslate=minecraft:chest_9
+minecraft:polished_deepslate=minecraft:chest_10
+minecraft:deepslate=minecraft:chest_11
+minecraft:deepslate_bricks=minecraft:chest_11
+minecraft:deepslate_tiles=minecraft:chest_11
 
 # Crops
 minecraft:wheat=minecraft:barrel_9
