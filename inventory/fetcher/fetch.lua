@@ -1,6 +1,6 @@
 -- fetch.lua: Retrieve specified items from networked storage
 -- Configuration: set your desired output chest (network peripheral name)
-local outputChest = "chest_output"  -- change to your output chest peripheral name
+local outputChest = "minecraft:chest_"  -- change to your networked output chest peripheral name
 local listLineDelay = 1
 
 -- Utility: trim whitespace
@@ -8,33 +8,17 @@ local function trim(s)
   return (s or ""):match("^%s*(.-)%s*$")
 end
 
--- Discover all storage peripherals on network or attached
+-- Discover all storage peripherals on network
 local function getStoragePeripherals()
   local names = peripheral.getNames()
   local storage = {}
   for _, name in ipairs(names) do
-    if peripheral.isPresent(name) then
-      local ok, per = pcall(peripheral.wrap, name)
-      if ok and type(per.list) == "function" then
-        table.insert(storage, name)
-      end
+    local ok, per = pcall(peripheral.wrap, name)
+    if ok and type(per.list) == "function" then
+      table.insert(storage, name)
     end
   end
   return storage
-end
-
--- Find first attached inventory peripheral (adjacent sides)
-local function getAttachedStorage()
-  local sides = {"left","right","top","bottom","front","back"}
-  for _, side in ipairs(sides) do
-    if peripheral.isPresent(side) then
-      local ok, per = pcall(peripheral.wrap, side)
-      if ok and type(per.list) == "function" then
-        return side
-      end
-    end
-  end
-  return nil
 end
 
 -- Build inventory index: { [itemName] = { total=N, sources={ {chest,slot,count}, ... } } }
@@ -75,20 +59,12 @@ local function main()
     return
   end
 
-  -- 2. Determine output chest (prefer attached)
-  local outSideOrName = getAttachedStorage() or (peripheral.isPresent(outputChest) and outputChest)
-  if not outSideOrName then
-    print("Error: No attached storage and outputChest '"..outputChest.."' not found.")
+  -- 2. Determine output chest (network only)
+  if not peripheral.isPresent(outputChest) then
+    print("Error: outputChest '" .. outputChest .. "' not found on network.")
     return
   end
-
-  -- Wrap and get network name for output peripheral
-  local outPeripheral = peripheral.wrap(outSideOrName)
-  if not outPeripheral then
-    print("Error: Unable to wrap output peripheral: "..tostring(outSideOrName))
-    return
-  end
-  local outName = peripheral.getName(outPeripheral)
+  local outName = outputChest
 
   -- 3. Index items
   print("Indexing items...")
@@ -142,7 +118,6 @@ local function main()
     if toFetch <= 0 then break end
     local take = math.min(src.count, toFetch)
     local per = peripheral.wrap(src.chest)
-    -- Push to output using correct network name
     local ok = per.pushItems(outName, src.slot, take)
     if ok and ok > 0 then
       moved = moved + ok
