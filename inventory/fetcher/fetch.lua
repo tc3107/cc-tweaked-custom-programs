@@ -82,7 +82,7 @@ local function main()
   local outName = outputChest
 
   -- 3. Index items quickly
-  print("Indexing items quickly...")
+  print("Indexing items...")
   local index, prefixes = buildInventoryIndex(storage)
 
   -- 4. Prompt for action
