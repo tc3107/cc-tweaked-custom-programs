@@ -1,16 +1,4 @@
--- inventory_control.lua (configurable via item_addresses.txt)
-
-local protocol = "sort"
-local hostname = "inventory_control"
-
--- Load mappings from configuration file
-local destinationMap = {}
-local overflowChest = nil
-
--- Simple trim utility
-local function trim(s)
-    return (s:gsub("^%s*(.-)%s*$", "%1"))
-end
+-- sorter_server.lua (configurable via item_addresses.txt)
 
 local protocol = "sort"
 local hostname = "inventory_control"
