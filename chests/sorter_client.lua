@@ -20,20 +20,20 @@ end
 
 -- Send the chest list
 rednet.send(serverId, chestsToSort, protocol)
-print("Sent sort request to server for chests:")
+print("Sent sort request for chests:")
 for _, name in ipairs(chestsToSort) do
     print("- " .. name)
 end
 
--- Optionally wait for an acknowledgment
-local timer = os.startTimer(3)  -- Wait up to 3 seconds
+print("Waiting for server updates...")
+
+-- Receive and display every update until the server signals completion
 while true do
-    local event, p1, p2, p3 = os.pullEvent()
-    if event == "rednet_message" and p1 == serverId then
-        print("Server replied: " .. tostring(p2))
-        break
-    elseif event == "timer" and p1 == timer then
-        print("No reply from server, continuing anyway.")
-        break
+    local senderId, message, proto = rednet.receive(protocol)
+    if senderId == serverId then
+        print("Server: " .. message)
+        if message == "Sorting complete" then
+            break
+        end
     end
 end
