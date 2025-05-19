@@ -4,8 +4,16 @@ local hostname = "inventory_control"
 
 -- Map of item names to list of destination chest peripheral names
 local destinationMap = {
-    ["minecraft:cobblestone"] = { "minecraft:chest_1" },
-    ["minecraft:dirt"]         = { "minecraft:chest_2" }
+    ["minecraft:wheat"] = { "minecraft:barrel_9" },
+    ["minecraft:wheat_seeds"] = { "minecraft:barrel_8" },
+    ["swem:oat_bushel"] = { "minecraft:barrel_6" },
+    ["swem:oat_seeds"] = { "minecraft:barrel_7" },
+    ["swem:timothy_bushel"] = { "minecraft:barrel_5" },
+    ["swem:timothy_seeds"] = { "minecraft:barrel_4" },
+    ["swem:alfalfa_bushel"] = { "minecraft:barrel_2" },
+    ["swem:alfalfa_seeds"] = { "minecraft:barrel_3" },
+    ["supplementaries:flax"] = { "minecraft:barrel_1" },
+    ["supplementaries:flax_seeds"] = { "minecraft:barrel_0" }
     -- Add more mappings here
 }
 
