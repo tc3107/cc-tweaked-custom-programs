@@ -12,6 +12,18 @@ local function trim(s)
     return (s:gsub("^%s*(.-)%s*$", "%1"))
 end
 
+local protocol = "sort"
+local hostname = "inventory_control"
+
+-- Load mappings from configuration file
+local destinationMap = {}
+local overflowChest = nil
+
+-- Simple trim utility
+local function trim(s)
+    return (s:gsub("^%s*(.-)%s*$", "%1"))
+end
+
 -- Read addresses from item_addresses.txt
 if fs.exists("item_addresses.txt") then
     local file = fs.open("item_addresses.txt", "r")
