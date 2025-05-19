@@ -5,7 +5,7 @@ local hostname = "inventory_control"
 -- Map of item names to list of destination chest peripheral names
 local destinationMap = {
     ["minecraft:cobblestone"] = { "minecraft:chest_1" },
-    ["minecraft:dirt"] = { "minecraft:chest_2" }
+    ["minecraft:dirt"]         = { "minecraft:chest_2" }
     -- Add more mappings here
 }
 
@@ -17,13 +17,28 @@ rednet.open("back") -- adjust side if needed
 rednet.host(protocol, hostname)
 print("Inventory server online as '" .. hostname .. "' using protocol '" .. protocol .. "'.")
 
+-- Override print to also send every log line back to the client
+local currentClientId
+local originalPrint = print
+print = function(...)
+    local parts = {}
+    for i = 1, select('#', ...) do
+        parts[i] = tostring(select(i, ...))
+    end
+    local msg = table.concat(parts, " ")
+    originalPrint(msg)                  -- still log locally
+    if currentClientId then
+        rednet.send(currentClientId, msg, protocol)
+    end
+end
+
 -- Helper to check available space in a chest
 local function getFreeSpace(chestName)
     if not peripheral.isPresent(chestName) then return -1 end
     local chest = peripheral.wrap(chestName)
     local total = chest.size()
     local used = 0
-    for slot, item in pairs(chest.list()) do
+    for _, item in pairs(chest.list()) do
         if item then used = used + 1 end
     end
     return total - used
@@ -54,20 +69,20 @@ local function sortChest(chestName)
     end
 
     local chest = peripheral.wrap(chestName)
-    local items = chest.list()
-
-    for slot, item in pairs(items) do
-        local name = item.name
-        local count = item.count
+    for slot, item in pairs(chest.list()) do
+        local name   = item.name
+        local count  = item.count
         local targets = destinationMap[name]
 
         if targets then
             local success = moveItemToOutputs(chestName, slot, name, count, targets)
-            if not success and overflowChest and peripheral.isPresent(overflowChest) then
-                chest.pushItems(overflowChest, slot, count)
-                print("Moved " .. count .. "x " .. name .. " to overflow chest.")
-            elseif not success then
-                print("Warning: No available space for " .. name .. ", and no overflow defined.")
+            if not success then
+                if overflowChest and peripheral.isPresent(overflowChest) then
+                    chest.pushItems(overflowChest, slot, count)
+                    print("Moved " .. count .. "x " .. name .. " to overflow chest")
+                else
+                    print("Warning: No available space for " .. name .. " and no overflow defined")
+                end
             end
         else
             print("Unmapped item: " .. name)
@@ -78,6 +93,8 @@ end
 -- Main listener loop
 while true do
     local senderId, msg, proto = rednet.receive(protocol)
+    currentClientId = senderId
+
     if type(msg) == "table" then
         for _, chestName in ipairs(msg) do
             print("Sorting chest: " .. chestName)
@@ -87,6 +104,9 @@ while true do
         print("Sorting single chest: " .. msg)
         sortChest(msg)
     else
-        print("Invalid message format received.")
+        print("Invalid message format received")
     end
+
+    print("Sorting complete")
+    currentClientId = nil
 end
