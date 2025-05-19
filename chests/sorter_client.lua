@@ -3,8 +3,8 @@ local protocol = "sort"
 local serverHostname = "inventory_control"
 
 local chestsToSort = {
-    "chest_1",
-    "chest_2"
+    "minecraft:chest_1",
+    "minecraft:chest_2"
     -- Add more chest IDs as needed
 }
 
