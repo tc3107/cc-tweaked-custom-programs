@@ -1,6 +1,7 @@
 -- fetch.lua: Retrieve specified items from networked storage
 -- Configuration: set your desired output chest (network peripheral name)
 local outputChest = "chest_output"  -- change to your output chest peripheral name
+local listLineDelay = 0.5
 
 -- Utility: trim whitespace
 local function trim(s)
@@ -99,7 +100,7 @@ local function main()
     -- print with delay
     for _, v in ipairs(items) do
       print(v.name .. " - " .. v.total)
-      sleep(0.3)
+      sleep(listLineDelay)
     end
     return
   end
