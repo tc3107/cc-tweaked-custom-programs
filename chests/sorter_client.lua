@@ -9,7 +9,7 @@ local chestsToSort = {
 }
 
 -- Open modem
-rednet.open("back")  -- Change side if needed
+rednet.open("right")  -- Change side if needed
 
 -- Lookup the server by hostname
 local serverId = rednet.lookup(protocol, serverHostname)
