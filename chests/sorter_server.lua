@@ -4,8 +4,8 @@ local hostname = "inventory_control"
 
 -- Define item → destination chest map
 local destinationMap = {
-    ["minecraft:cobblestone"] = { "chest_1" },
-    ["minecraft:dirt"] = { "chest_2" }
+    ["minecraft:cobblestone"] = { "minecraft:chest_1" },
+    ["minecraft:dirt"] = { "minecraft:chest_2" }
     -- Add more mappings here
 }
 
