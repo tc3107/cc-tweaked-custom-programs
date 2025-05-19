@@ -1,4 +1,3 @@
-# This is a comment. 
 # The overflow address is supposed to look something like:
 # overflowChest=chest_overflow
 
