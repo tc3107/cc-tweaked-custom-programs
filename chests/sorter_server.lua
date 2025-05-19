@@ -77,10 +77,10 @@ while true do
         for _, chestName in ipairs(msg) do
             local ok, result = sortChest(chestName)
             if not ok then
-                table.insert(reply, "❌ " .. result)
+                table.insert(reply, "- " .. result)
             else
                 for _, line in ipairs(result) do
-                    table.insert(reply, "✅ " .. line)
+                    table.insert(reply, "+ " .. line)
                 end
             end
         end
