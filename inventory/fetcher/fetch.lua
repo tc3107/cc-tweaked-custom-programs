@@ -46,20 +46,15 @@ local function buildInventoryIndex(storagePeripherals)
     for slot, item in pairs(per.list()) do
       local name  = item.name
       local count = item.count
-      -- initialize
       if not index[name] then
         index[name] = { total = 0, sources = {} }
       end
       index[name].total = index[name].total + count
       table.insert(index[name].sources, { chest = chest, slot = slot, count = count })
-      -- collect prefix
       local prefix = name:match("^(.-):")
-      if prefix and not prefixSet[prefix] then
-        prefixSet[prefix] = true
-      end
+      if prefix then prefixSet[prefix] = true end
     end
   end
-  -- gather prefixes into list
   local prefixes = {}
   for p in pairs(prefixSet) do table.insert(prefixes, p) end
   return index, prefixes
@@ -79,34 +74,44 @@ local function main()
     print("Error: No storage peripherals found on network.")
     return
   end
-  -- 2. Determine output chest
-  local out = getAttachedStorage() or (peripheral.isPresent(outputChest) and outputChest)
-  if not out then
+
+  -- 2. Determine output chest (prefer attached)
+  local outSideOrName = getAttachedStorage() or (peripheral.isPresent(outputChest) and outputChest)
+  if not outSideOrName then
     print("Error: No attached storage and outputChest '"..outputChest.."' not found.")
     return
   end
+
+  -- Wrap and get network name for output peripheral
+  local outPeripheral = peripheral.wrap(outSideOrName)
+  if not outPeripheral then
+    print("Error: Unable to wrap output peripheral: "..tostring(outSideOrName))
+    return
+  end
+  local outName = peripheral.getName(outPeripheral)
+
   -- 3. Index items
   print("Indexing items...")
   local index, prefixes = buildInventoryIndex(storage)
+
   -- 4. Prompt for action
   local choice = trim(string.lower(prompt("Enter item name or 'list':")))
   if choice == "list" then
-    -- build list and sort by total desc
     local items = {}
     for name, data in pairs(index) do
       table.insert(items, { name = name, total = data.total })
     end
     table.sort(items, function(a,b) return a.total > b.total end)
-    -- print with delay
     for _, v in ipairs(items) do
       print(v.name .. " - " .. v.total)
       sleep(listLineDelay)
     end
     return
   end
+
   -- 5. Normalize input and find match
   local normalized = choice:gsub("%s+", "_")
-  local itemName = nil
+  local itemName
   for _, prefix in ipairs(prefixes) do
     local candidate = prefix .. ":" .. normalized
     if index[candidate] then
@@ -118,15 +123,18 @@ local function main()
     print("Item not found: " .. choice)
     return
   end
+
   local available = index[itemName].total
   print("Available: " .. available)
+
   -- 6. Quantity
-  local qtyStr = prompt("How many would you like to fetch? ")
+  local qtyStr = prompt("How many would you like to fetch?")
   local want = tonumber(qtyStr)
   if not want or want < 1 or want > available then
     print("Invalid quantity.")
     return
   end
+
   -- 7. Transfer
   local toFetch = want
   local moved = 0
@@ -134,21 +142,21 @@ local function main()
     if toFetch <= 0 then break end
     local take = math.min(src.count, toFetch)
     local per = peripheral.wrap(src.chest)
-    local target = peripheral.getName(peripheral.wrap(out))
-    local ok = per.pushItems(target, src.slot, take)
-    if ok > 0 then
+    -- Push to output using correct network name
+    local ok = per.pushItems(outName, src.slot, take)
+    if ok and ok > 0 then
       moved = moved + ok
       toFetch = toFetch - ok
     end
   end
+
   -- 8. Report
   if moved < want then
     print("Warning: Only fetched "..moved.." of "..want.." requested.")
   else
-    print("Successfully fetched "..moved.." items to "..out)
+    print("Successfully fetched "..moved.." items to "..outName)
   end
 end
 
 -- Run program
 main()
-
