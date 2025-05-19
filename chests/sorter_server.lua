@@ -12,7 +12,7 @@ local destinationMap = {
 local overflowChest = "chest_overflow"
 
 -- Start network
-rednet.open("top")
+rednet.open("back")
 rednet.host(protocol, hostname)
 print("Inventory server online as '" .. hostname .. "' using protocol '" .. protocol .. "'.")
 
