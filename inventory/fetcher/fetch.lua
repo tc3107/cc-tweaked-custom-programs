@@ -1,6 +1,6 @@
 -- fetch.lua: Retrieve specified items from networked storage
 -- Configuration: set your desired output chest (network peripheral name)
-local outputChest = "minecraft:chest_"  -- change to your networked output chest peripheral name
+local outputChest = "minecraft:chest_X"  -- change to your networked output chest peripheral name
 local listLineDelay = 1
 
 -- Utility: trim whitespace
@@ -10,9 +10,8 @@ end
 
 -- Discover all storage peripherals on network
 local function getStoragePeripherals()
-  local names = peripheral.getNames()
   local storage = {}
-  for _, name in ipairs(names) do
+  for _, name in ipairs(peripheral.getNames()) do
     local ok, per = pcall(peripheral.wrap, name)
     if ok and type(per.list) == "function" then
       table.insert(storage, name)
@@ -48,6 +47,17 @@ end
 local function prompt(msg)
   write(msg .. " ")
   return read()
+end
+
+-- Get free slots in a chest peripheral
+local function getFreeSpace(chestName)
+  local per = peripheral.wrap(chestName)
+  local total = per.size()
+  local used = 0
+  for _, item in pairs(per.list()) do
+    if item then used = used + 1 end
+  end
+  return total - used
 end
 
 -- Main fetch logic
@@ -111,12 +121,18 @@ local function main()
     return
   end
 
-  -- 7. Transfer
+  -- 7. Transfer with chest-full check
   local toFetch = want
   local moved = 0
   for _, src in ipairs(index[itemName].sources) do
     if toFetch <= 0 then break end
-    local take = math.min(src.count, toFetch)
+    -- Check output chest space
+    local free = getFreeSpace(outName)
+    if free <= 0 then
+      print("Output chest is full. Stopping transfer.")
+      break
+    end
+    local take = math.min(src.count, toFetch, free)
     local per = peripheral.wrap(src.chest)
     local ok = per.pushItems(outName, src.slot, take)
     if ok and ok > 0 then
@@ -126,11 +142,7 @@ local function main()
   end
 
   -- 8. Report
-  if moved < want then
-    print("Warning: Only fetched "..moved.." of "..want.." requested.")
-  else
-    print("Successfully fetched "..moved.." items to "..outName)
-  end
+  print("Fetched " .. moved .. " of " .. want .. " requested.")
 end
 
 -- Run program
