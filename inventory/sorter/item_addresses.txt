@@ -11,6 +11,7 @@ minecraft:gravel=minecraft:chest_16
 minecraft:clay=minecraft:chest_17
 minecraft:clay_ball=minecraft:chest_17
 supplementaries:ash=minecraft:chest_25
+cgm:shell:minecraft:chest_27
 
 # Drops
 minecraft:bone=minecraft:chest_18
