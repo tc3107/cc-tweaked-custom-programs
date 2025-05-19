@@ -1,6 +1,7 @@
-local attached = peripheral.wrap("bottom")
+local side = "bottom"
+local attachedPeripheral = peripheral.wrap(side)
 for _, name in ipairs(peripheral.getNames()) do
-  if peripheral.wrap(name) == attached then
+  if peripheral.wrap(name) == attachedPeripheral then
     print("Network name:", name)
     break
   end
