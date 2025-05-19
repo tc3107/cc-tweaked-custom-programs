@@ -94,7 +94,11 @@ local function main()
     end
     table.sort(items, function(a,b) return a.total > b.total end)
     for _, v in ipairs(items) do
-      print(v.name .. " - " .. v.total)
+      -- strip prefix and format name
+      local rawName = v.name:match(":(.+)") or v.name
+      local displayName = rawName:gsub("_", " ")
+      -- print with bullet
+      print("* " .. displayName .. " - " .. v.total)
       sleep(listLineDelay)
     end
     return
