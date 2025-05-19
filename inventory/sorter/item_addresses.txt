@@ -4,6 +4,10 @@
 # Bunker Storage
 minecraft:cobblestone=minecraft:chest_8,minecraft:chest_7,minecraft:chest_6
 minecraft:cobbled_deepslate=minecraft:chest_9,minecraft:chest_10,minecraft:chest_11
+minecraft:white_concrete_powder:minecraft:chest_12
+minecraft:white_concrete:minecraft:chest_12
+minecraft:light_gray_concrete_powder:minecraft:chest_13
+minecraft:light_gray_concrete:minecraft:chest_13
 
 # Windmill Barrels
 minecraft:wheat=minecraft:barrel_9
