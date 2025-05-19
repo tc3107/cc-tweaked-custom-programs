@@ -134,7 +134,8 @@ local function main()
     if toFetch <= 0 then break end
     local take = math.min(src.count, toFetch)
     local per = peripheral.wrap(src.chest)
-    local ok = per.pushItems(out, src.slot, take)
+    local target = peripheral.getName(peripheral.wrap(out))
+    local ok = per.pushItems(target, src.slot, take)
     if ok > 0 then
       moved = moved + ok
       toFetch = toFetch - ok
