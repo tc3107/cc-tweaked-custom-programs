@@ -1,24 +1,51 @@
--- inventory_control.lua
+-- inventory_control.lua (configurable via item_addresses.txt)
+
 local protocol = "sort"
 local hostname = "inventory_control"
 
--- Map of item names to list of destination chest peripheral names
-local destinationMap = {
-    ["minecraft:wheat"] = { "minecraft:barrel_9" },
-    ["minecraft:wheat_seeds"] = { "minecraft:barrel_8" },
-    ["swem:oat_bushel"] = { "minecraft:barrel_6" },
-    ["swem:oat_seeds"] = { "minecraft:barrel_7" },
-    ["swem:timothy_bushel"] = { "minecraft:barrel_5" },
-    ["swem:timothy_seeds"] = { "minecraft:barrel_4" },
-    ["swem:alfalfa_bushel"] = { "minecraft:barrel_2" },
-    ["swem:alfalfa_seeds"] = { "minecraft:barrel_3" },
-    ["supplementaries:flax"] = { "minecraft:barrel_1" },
-    ["supplementaries:flax_seeds"] = { "minecraft:barrel_0" }
-    -- Add more mappings here
-}
+-- Load mappings from configuration file
+local destinationMap = {}
+local overflowChest = nil
 
--- Optional overflow chest
-local overflowChest = "chest_overflow"
+-- Simple trim utility
+local function trim(s)
+    return (s:gsub("^%s*(.-)%s*$", "%1"))
+end
+
+-- Read addresses from item_addresses.txt
+if fs.exists("item_addresses.txt") then
+    local file = fs.open("item_addresses.txt", "r")
+    if file then
+        local line = file.readLine()
+        while line do
+            line = trim(line)
+            -- skip empty lines and comments
+            if line ~= "" and not line:match("^#") then
+                local key, val = line:match("([^=]+)=(.+)")
+                if key and val then
+                    key = trim(key)
+                    val = trim(val)
+                    if key == "overflowChest" then
+                        overflowChest = val
+                    else
+                        local outputs = {}
+                        for dest in val:gmatch("([^,]+)") do
+                            table.insert(outputs, trim(dest))
+                        end
+                        destinationMap[key] = outputs
+                    end
+                end
+            end
+            line = file.readLine()
+        end
+        file.close()
+        print("Configuration loaded from item_addresses.txt.")
+    else
+        error("Unable to open item_addresses.txt for reading.")
+    end
+else
+    error("Configuration file 'item_addresses.txt' not found.")
+end
 
 -- Initialize networking
 rednet.open("back") -- adjust side if needed
@@ -34,7 +61,7 @@ print = function(...)
         parts[i] = tostring(select(i, ...))
     end
     local msg = table.concat(parts, " ")
-    originalPrint(msg)                  -- still log locally
+    originalPrint(msg)
     if currentClientId then
         rednet.send(currentClientId, msg, protocol)
     end
@@ -78,8 +105,8 @@ local function sortChest(chestName)
 
     local chest = peripheral.wrap(chestName)
     for slot, item in pairs(chest.list()) do
-        local name   = item.name
-        local count  = item.count
+        local name  = item.name
+        local count = item.count
         local targets = destinationMap[name]
 
         if targets then
