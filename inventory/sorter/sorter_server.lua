@@ -87,7 +87,7 @@ local function moveItemToOutputs(src, slot, itemName, amount, outputs)
             if free > 0 then
                 local moved = peripheral.wrap(src).pushItems(destName, slot, amount)
                 if moved > 0 then
-                    print("Moved " .. moved .. "x " .. itemName .. " to destination.")
+                    print("Moved " .. moved .. "x " .. itemName)
                     return true
                 end
             end
