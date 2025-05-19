@@ -2,91 +2,91 @@
 local protocol = "sort"
 local hostname = "inventory_control"
 
--- Map of item names to list of destination chest peripheral names
+-- Define item → destination chest map
 local destinationMap = {
-    ["minecraft:cobblestone"] = { "chest1", "chest2", "chest3" },
-    ["minecraft:iron_ingot"] = { "chest0" }
+    ["minecraft:cobblestone"] = { "chest_1" },
+    ["minecraft:dirt"] = { "chest_2" }
     -- Add more mappings here
 }
 
--- Optional overflow chest
 local overflowChest = "chest_overflow"
 
--- Initialize networking
-rednet.open("top") -- adjust side if needed
+-- Start network
+rednet.open("top")
 rednet.host(protocol, hostname)
 print("Inventory server online as '" .. hostname .. "' using protocol '" .. protocol .. "'.")
 
--- Helper to check available space in a chest
+-- Helper to get free space in a chest
 local function getFreeSpace(chestName)
     if not peripheral.isPresent(chestName) then return -1 end
     local chest = peripheral.wrap(chestName)
     local total = chest.size()
     local used = 0
-    for slot, item in pairs(chest.list()) do
-        if item then used = used + 1 end
+    for _, item in pairs(chest.list()) do
+        used = used + 1
     end
     return total - used
 end
 
--- Try to move item to one of the output chests in the list
-local function moveItemToOutputs(src, slot, itemName, amount, outputs)
-    for _, destName in ipairs(outputs) do
-        if peripheral.isPresent(destName) then
-            local free = getFreeSpace(destName)
-            if free > 0 then
-                local moved = peripheral.wrap(src).pushItems(destName, slot, amount)
-                if moved > 0 then
-                    print("Moved " .. moved .. "x " .. itemName .. " from " .. src .. " to " .. destName)
-                    return true
-                end
+-- Move item from input chest to best output
+local function moveItem(chestName, slot, itemName, count)
+    local targets = destinationMap[itemName]
+    if not targets then return false, "No destination for item: " .. itemName end
+
+    for _, target in ipairs(targets) do
+        if peripheral.isPresent(target) and getFreeSpace(target) > 0 then
+            local moved = peripheral.wrap(chestName).pushItems(target, slot, count)
+            if moved > 0 then
+                return true, "Moved " .. moved .. "x " .. itemName .. " to " .. target
             end
         end
     end
-    return false
+
+    if overflowChest and peripheral.isPresent(overflowChest) then
+        peripheral.wrap(chestName).pushItems(overflowChest, slot, count)
+        return true, "Sent " .. itemName .. " to overflow"
+    end
+
+    return false, "No space for item: " .. itemName
 end
 
--- Sort items from a single input chest
+-- Sort contents of a single chest
 local function sortChest(chestName)
     if not peripheral.isPresent(chestName) then
-        print("Error: Chest '" .. chestName .. "' not found.")
-        return
+        return false, "Chest not found: " .. chestName
     end
 
     local chest = peripheral.wrap(chestName)
-    local items = chest.list()
+    local contents = chest.list()
+    local result = {}
 
-    for slot, item in pairs(items) do
-        local name = item.name
-        local count = item.count
-        local targets = destinationMap[name]
-
-        if targets then
-            local success = moveItemToOutputs(chestName, slot, name, count, targets)
-            if not success and overflowChest and peripheral.isPresent(overflowChest) then
-                chest.pushItems(overflowChest, slot, count)
-                print("Moved " .. count .. "x " .. name .. " to overflow chest.")
-            elseif not success then
-                print("Warning: No available space for " .. name .. ", and no overflow defined.")
-            end
-        else
-            print("Unmapped item: " .. name)
-        end
+    for slot, item in pairs(contents) do
+        local success, message = moveItem(chestName, slot, item.name, item.count)
+        table.insert(result, message)
     end
+
+    return true, result
 end
 
--- Main listener loop
+-- Server loop
 while true do
     local senderId, msg, proto = rednet.receive(protocol)
+    local reply = {}
+
     if type(msg) == "table" then
         for _, chestName in ipairs(msg) do
-            print("Sorting chest: " .. chestName)
-            sortChest(chestName)
+            local ok, result = sortChest(chestName)
+            if not ok then
+                table.insert(reply, "❌ " .. result)
+            else
+                for _, line in ipairs(result) do
+                    table.insert(reply, "✅ " .. line)
+                end
+            end
         end
-    elseif type(msg) == "string" then
-        print("Sorting single chest: " .. msg)
-        sortChest(msg)
     else
-        print("Invalid message format received.")
+        table.insert(reply, "Invalid request: expected list of chests.")
     end
+
+    rednet.send(senderId, reply, protocol)
 end
