@@ -29,7 +29,7 @@ local activeReaders = {}
 for _, name in ipairs(chestReaders) do
   local id = rednet.lookup(protocol, name)
   if id then
-    rednet.send(id, "get_inventory", protocol)
+    rednet.send(id, {"get_inventory"}, protocol)
     activeReaders[id] = true
   else
     print("Could not resolve hostname:", name)
@@ -46,7 +46,8 @@ local responsesReceived = 0
 local startTime = os.clock()
 
 while responsesReceived < responsesExpected and (os.clock() - startTime) < timeout do
-  local senderId, response, proto = rednet.receive(protocol, 1)
+  local senderId, data, proto = rednet.receive(protocol, 1)
+  local response = data[1]
   if senderId and activeReaders[senderId] and type(response) == "table" then
     addItems(response)
     responsesReceived = responsesReceived + 1
