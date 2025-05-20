@@ -7,7 +7,7 @@ local relay = peripheral.wrap("redstone_relay_4")
 rednet.open('right')
 
 term.redirect(monitor)
-monitor.setTextScale(0.75)
+monitor.setTextScale(0.5)
 monitor.clear()
 monitor.setCursorPos(1,1)
 
@@ -16,7 +16,7 @@ print("Running control program...")
 local doorState = false
 local lastIn = false
 local invert = true
-local cycleTime = 2
+local cycleTime = 0.75
 
 local function update(state)
     if invert then
