@@ -1,7 +1,7 @@
+-- Detect modems
 local sides = { "left", "right", "top", "bottom", "front", "back" }
 local modems = {}
 
--- Detect modems
 for _, side in ipairs(sides) do
     if peripheral.getType(side) == "modem" then
         rednet.open(side)
@@ -16,39 +16,41 @@ end
 
 local modemA = modems[1]
 local modemB = modems[2]
-local relayId = os.getComputerID()
 
-print("Relay ID " .. relayId .. " bridging '" .. modemA .. "' and '" .. modemB .. "'")
+print("Relay active between sides '" .. modemA .. "' and '" .. modemB .. "'")
 
--- Helper to determine if message is from another relay
-local function isFromRelay(message)
-    return type(message) == "table" and message.fromRelay == true
-end
-
--- Relay function: one direction
+-- Relay logic
 local function relay(fromSide, toSide)
     while true do
-        local senderId, message, protocol = rednet.receive()
+        local senderId, message, protocol = rednet.receive(nil, nil, fromSide)
 
-        -- Ignore messages from other relays
-        if isFromRelay(message) then
-            -- Optionally: print("Ignored relay message from ID " .. senderId)
+        if type(message) == "table" then
+            local isTagged = false
+
+            -- Check if message already has "source:relay" tag
+            for i = 2, #message do
+                if message[i] == "source:relay" then
+                    isTagged = true
+                    break
+                end
+            end
+
+            if not isTagged then
+                local newMessage = { table.unpack(message) }
+                table.insert(newMessage, "source:relay")
+
+                rednet.send(senderId, newMessage, protocol, toSide)
+                print("Forwarded from " .. fromSide .. " → " .. toSide .. " (protocol: " .. tostring(protocol) .. ")")
+            else
+                print("Rejected looped message from " .. fromSide)
+            end
         else
-            -- Wrap message and tag it as from a relay
-            local wrapped = {
-                fromRelay = true,
-                originalSender = senderId,
-                data = message,
-                protocol = protocol
-            }
-
-            rednet.broadcast(wrapped, protocol)
-            print("Forwarded message from ID " .. senderId .. " on protocol '" .. protocol .. "'")
+            print("Ignored non-list message from " .. fromSide)
         end
     end
 end
 
--- Start bidirectional safe relay
+-- Run two threads for bidirectional communication
 parallel.waitForAny(
     function() relay(modemA, modemB) end,
     function() relay(modemB, modemA) end
