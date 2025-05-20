@@ -63,7 +63,7 @@ print = function(...)
     local msg = table.concat(parts, " ")
     originalPrint(msg)
     if currentClientId then
-        rednet.send(currentClientId, msg, protocol)
+        rednet.send(currentClientId, {msg}, protocol)
     end
 end
 
@@ -129,7 +129,8 @@ end
 
 -- Main listener loop
 while true do
-    local senderId, msg, proto = rednet.receive(protocol)
+    local senderId, data, proto = rednet.receive(protocol)
+    local msg = data[1]
     currentClientId = senderId
 
     if type(msg) == "table" then
