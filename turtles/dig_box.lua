@@ -1,7 +1,8 @@
 -- Persistent Box Excavator with Return-to-Start, Resume & Auto-Refuel (Fixed Layer Alignment)
 -------------------------------------------------------------------------------
 -- CONFIGURATION
-local X, Y, Z      = 5, 3, 4                   -- box dimensions
+-- Forward, Up, Right
+local X, Y, Z      = 5, 3, 4
 local STATE_FILE   = "resume_state.txt"
 
 -- STATE (x, y, z, dir, stage)
