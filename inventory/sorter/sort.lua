@@ -19,7 +19,7 @@ if not serverId then
 end
 
 -- Send the chest list
-rednet.send(serverId, chestsToSort, protocol)
+rednet.send(serverId, {chestsToSort}, protocol)
 print("Sent sort request for chests:")
 for _, name in ipairs(chestsToSort) do
     print("- " .. name)
@@ -29,7 +29,8 @@ print("Waiting for server updates...")
 
 -- Receive and display every update until the server signals completion
 while true do
-    local senderId, message, proto = rednet.receive(protocol)
+    local senderId, data, proto = rednet.receive(protocol)
+    local message = data[1]
     if senderId == serverId then
         print("Server: " .. message)
         if message == "Sorting complete" then
