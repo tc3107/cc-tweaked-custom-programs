@@ -1,5 +1,5 @@
 -- Configuration
-local TUNNEL_LENGTH = 100
+local TUNNEL_LENGTH = 10
 local TORCH_INTERVAL = 0  -- Set to nil to disable torch placement
 local FUEL_THRESHOLD = 10
 
