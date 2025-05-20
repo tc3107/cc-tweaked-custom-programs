@@ -37,12 +37,13 @@ end
 
 -- Main server loop
 while true do
-  local senderId, message, protocol = rednet.receive("items")
+  local senderId, data, protocol = rednet.receive("items")
+  local message = data[1]
   print("Received:", message, "from", senderId)
 
   if message == "get_inventory" then
     local inventory = getInventory()
-    rednet.send(senderId, inventory, "items")
+    rednet.send(senderId, {inventory}, "items")
     print("Inventory sent to", senderId)
   else
     print("Unknown request:", message)
