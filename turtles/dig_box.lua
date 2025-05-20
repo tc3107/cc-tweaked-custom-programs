@@ -1,6 +1,6 @@
--- Persistent Box Excavator with Return-to-Start, Resume & Auto-Refuel (Fixed Layer Alignment)
+-- Persistent Box Excavator with Return-to-Start, Resume & Auto-Refuel
 -------------------------------------------------------------------------------
--- CONFIGURATION
+
 -- Forward, Up, Right
 local X, Y, Z      = 5, 3, 4
 local STATE_FILE   = "resume_state.txt"
@@ -55,31 +55,24 @@ local function turnRight()
 end
 
 local function faceDir(target)
-  while state.dir ~= target do
-    turnRight()
-  end
+  while state.dir ~= target do turnRight() end
 end
 
 -- MOVEMENT ----------------------------------------------------------------
 local function moveForward()
-  if not tryRefuelOnce() then
-    print("✘ No fuel to move forward!") return false
-  end
-  while turtle.detect() do turtle.dig() end      -- clear front only
+  if not tryRefuelOnce() then print("✘ No fuel to move forward!") return false end
+  while turtle.detect() do turtle.dig() end
   if not turtle.forward() then return false end
   if     state.dir == 0 then state.x = state.x + 1
   elseif state.dir == 1 then state.z = state.z + 1
   elseif state.dir == 2 then state.x = state.x - 1
-  else                       state.z = state.z - 1
-  end
+  else                       state.z = state.z - 1 end
   return true
 end
 
 local function moveUp()
-  if not tryRefuelOnce() then
-    print("✘ No fuel to move up!") return false
-  end
-  while turtle.detectUp() do turtle.digUp() end  -- clear above only
+  if not tryRefuelOnce() then print("✘ No fuel to move up!") return false end
+  while turtle.detectUp() do turtle.digUp() end
   if not turtle.up() then return false end
   state.y = state.y + 1
   return true
@@ -91,39 +84,32 @@ end
 
 -- RETURN TO LAYER START --------------------------------------------------
 local function returnToLayerStart()
-  -- return along X-axis to x=1
+  -- return along X to 1
   local dx = 1 - state.x
   if dx ~= 0 then
     local dirX = dx > 0 and 0 or 2
     faceDir(dirX)
-    for i = 1, math.abs(dx) do
-      if not moveForward() then return false end
-    end
+    for i=1,math.abs(dx) do if not moveForward() then return false end end
   end
-  -- return along Z-axis to z=1
+  -- return along Z to 1
   local dz = 1 - state.z
   if dz ~= 0 then
     local dirZ = dz > 0 and 1 or 3
     faceDir(dirZ)
-    for i = 1, math.abs(dz) do
-      if not moveForward() then return false end
-    end
+    for i=1,math.abs(dz) do if not moveForward() then return false end end
   end
   state.x, state.z = 1, 1
   saveState()
-  faceDir(0)  -- face +X for next dig
+  faceDir(0)
   return true
 end
 
 -- STARTUP: LOAD & PROMPT RESUME -------------------------------------------
-local resumed = loadState()
-if resumed then
+if loadState() then
   print("Resume previous session? (y/n)")
   if read():lower() ~= "y" then
     deleteState()
     state = { x=1, y=1, z=1, dir=0, stage="dig" }
-  else
-    print(string.format("Resuming at X=%d Y=%d Z=%d (stage=%s)", state.x, state.y, state.z, state.stage))
   end
 else
   saveState()
@@ -131,7 +117,7 @@ end
 
 -- MAIN LOOP ---------------------------------------------------------------
 while true do
-  -- completion check
+  -- if beyond last layer, finish
   if state.y > Y then
     deleteState()
     print("✅ Box excavation complete!")
@@ -145,7 +131,7 @@ while true do
   end
 
   if state.stage == "ascend" then
-    if not moveUp() then error("Failed to ascend from layer Y="..state.y) end
+    if not moveUp() then error("Failed to ascend from layer "..state.y) end
     state.stage = "dig"
     state.x, state.z = 1, 1
     saveState()
@@ -156,7 +142,7 @@ while true do
       state.z = z
       saveState()
 
-      -- determine X traversal for snake pattern
+      -- determine snake pattern on X
       local xStart, xEnd, xStep = 1, X, 1
       if z % 2 == 0 then xStart, xEnd, xStep = X, 1, -1 end
       local startX = (z == state.z) and state.x or xStart
@@ -164,7 +150,6 @@ while true do
       for x = startX, xEnd, xStep do
         state.x = x
         saveState()
-        -- only move forward if not at end of row
         if x ~= xEnd then
           if not digAndMoveForward() then
             print(string.format("Halting at X=%d Y=%d Z=%d", state.x, state.y, state.z))
@@ -173,11 +158,10 @@ while true do
         end
       end
 
-      -- step into next Z-row
+      -- move to next row if needed
       if z < Z then
-        faceDir(1)  -- face +Z
-        if not digAndMoveForward() then error("Failed to step to next row.") end
-        -- face correct X direction
+        faceDir(1)
+        if not digAndMoveForward() then error("Failed stepping to next row.") end
         if z % 2 == 1 then faceDir(2) else faceDir(0) end
         state.x = xEnd
         state.z = z + 1
@@ -185,8 +169,14 @@ while true do
       end
     end
 
-    -- layer finished: move to return stage
-    state.stage = "return"
-    saveState()
+    -- if last layer, finish; else return to start
+    if state.y == Y then
+      deleteState()
+      print("✅ Box excavation complete!")
+      return
+    else
+      state.stage = "return"
+      saveState()
+    end
   end
 end
