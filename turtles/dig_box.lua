@@ -64,11 +64,11 @@ local function moveForward()
   if not tryRefuelOnce() then
     print("✘ No fuel to move forward!") return false
   end
-  while turtle.detect() do turtle.dig() end
+  while turtle.detect() do turtle.dig() end      -- clear front only
   if not turtle.forward() then return false end
-  if     state.dir==0 then state.x = state.x + 1
-  elseif state.dir==1 then state.z = state.z + 1
-  elseif state.dir==2 then state.x = state.x - 1
+  if     state.dir == 0 then state.x = state.x + 1
+  elseif state.dir == 1 then state.z = state.z + 1
+  elseif state.dir == 2 then state.x = state.x - 1
   else                       state.z = state.z - 1
   end
   return true
@@ -78,7 +78,7 @@ local function moveUp()
   if not tryRefuelOnce() then
     print("✘ No fuel to move up!") return false
   end
-  while turtle.detectUp() do turtle.digUp() end
+  while turtle.detectUp() do turtle.digUp() end  -- clear above only
   if not turtle.up() then return false end
   state.y = state.y + 1
   return true
@@ -90,21 +90,21 @@ end
 
 -- RETURN TO LAYER START --------------------------------------------------
 local function returnToLayerStart()
-  -- return along X to x=1
+  -- return along X-axis to x=1
   local dx = 1 - state.x
   if dx ~= 0 then
     local dirX = dx > 0 and 0 or 2
     faceDir(dirX)
-    for i=1, math.abs(dx) do
+    for i = 1, math.abs(dx) do
       if not moveForward() then return false end
     end
   end
-  -- return along Z to z=1
+  -- return along Z-axis to z=1
   local dz = 1 - state.z
   if dz ~= 0 then
     local dirZ = dz > 0 and 1 or 3
     faceDir(dirZ)
-    for i=1, math.abs(dz) do
+    for i = 1, math.abs(dz) do
       if not moveForward() then return false end
     end
   end
@@ -130,7 +130,7 @@ end
 
 -- MAIN LOOP ---------------------------------------------------------------
 while true do
-  -- check completion
+  -- completion check
   if state.y > Y then
     deleteState()
     print("✅ Box excavation complete!")
@@ -138,31 +138,24 @@ while true do
   end
 
   if state.stage == "return" then
-    -- return to start of current layer
-    if not returnToLayerStart() then
-      error("Failed to return to layer start.")
-    end
+    if not returnToLayerStart() then error("Failed to return to layer start.") end
     state.stage = "ascend"
     saveState()
   end
 
   if state.stage == "ascend" then
-    -- move up one layer
-    if not moveUp() then
-      error("Failed to ascend from layer Y="..state.y)
-    end
+    if not moveUp() then error("Failed to ascend from layer Y="..state.y) end
     state.stage = "dig"
     state.x, state.z = 1, 1
     saveState()
   end
 
   if state.stage == "dig" then
-    -- dig current layer
     for z = state.z, Z do
       state.z = z
       saveState()
 
-      -- determine X traversal
+      -- determine X traversal for snake pattern
       local xStart, xEnd, xStep = 1, X, 1
       if z % 2 == 0 then xStart, xEnd, xStep = X, 1, -1 end
       local startX = (z == state.z) and state.x or xStart
@@ -170,7 +163,8 @@ while true do
       for x = startX, xEnd, xStep do
         state.x = x
         saveState()
-        if not (state.y==Y and z==Z and x==xEnd) then
+        -- only move forward if not at end of row
+        if x ~= xEnd then
           if not digAndMoveForward() then
             print(string.format("Halting at X=%d Y=%d Z=%d", state.x, state.y, state.z))
             return
@@ -178,12 +172,11 @@ while true do
         end
       end
 
-      -- move to next Z row if not last
+      -- step into next Z-row
       if z < Z then
-        -- face toward +Z
-        faceDir(1)
+        faceDir(1)  -- face +Z
         if not digAndMoveForward() then error("Failed to step to next row.") end
-        -- face proper X direction
+        -- face correct X direction
         if z % 2 == 1 then faceDir(2) else faceDir(0) end
         state.x = xEnd
         state.z = z + 1
@@ -191,7 +184,7 @@ while true do
       end
     end
 
-    -- layer finished: prepare to return
+    -- layer finished: move to return stage
     state.stage = "return"
     saveState()
   end
