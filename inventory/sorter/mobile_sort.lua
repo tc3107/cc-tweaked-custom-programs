@@ -1,4 +1,4 @@
--- sort_client.lua
+-- mobile_sort_client.lua
 local protocol = "sort"
 local serverHostname = "inventory_control"
 
@@ -11,17 +11,10 @@ local chestsToSort = {
 }
 
 -- Open modem
-rednet.open("right")  -- Change side if needed
-
--- Lookup the server by hostname
-local serverId = rednet.lookup(protocol, serverHostname)
-if not serverId then
-    print("Error: Could not find server '" .. serverHostname .. "' on protocol '" .. protocol .. "'.")
-    return
-end
+rednet.open("back")  -- Change side if needed
 
 -- Send the chest list
-rednet.send(serverId, chestsToSort, protocol)
+rednet.broadcast(chestsToSort, protocol)
 print("Sent sort request for chests:")
 for _, name in ipairs(chestsToSort) do
     print("- " .. name)
@@ -32,7 +25,7 @@ print("Waiting for server updates...")
 -- Receive and display every update until the server signals completion
 while true do
     local senderId, message, proto = rednet.receive(protocol)
-    if senderId == serverId then
+    if proto == protocol then
         print("Server: " .. message)
         if message == "Sorting complete" then
             break
