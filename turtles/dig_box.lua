@@ -1,13 +1,15 @@
--- Persistent Box Excavator with Return-to-Start, Resume & Auto-Refuel
+-- Persistent Box Excavator with Return-to-Start, Resume & Auto-Refuel (Fixed Layer Alignment)
 -------------------------------------------------------------------------------
--- CONFIG
+-- CONFIGURATION
 local X, Y, Z      = 5, 3, 4                   -- box dimensions
 local STATE_FILE   = "resume_state.txt"
 
--- STATE
-local state = { x=1, y=1, z=1, dir=0 }          -- dir: 0=+X,1=+Z,2=-X,3=-Z
+-- STATE (x, y, z, dir, stage)
+-- dir: 0=+X, 1=+Z, 2=-X, 3=-Z
+-- stage: "dig", "return", "ascend"
+local state = { x=1, y=1, z=1, dir=0, stage="dig" }
 
--- PERSISTENCE
+-- PERSISTENCE --------------------------------------------------------------
 local function saveState()
   local f = fs.open(STATE_FILE, "w")
   f.write(textutils.serialize(state))
@@ -19,7 +21,7 @@ local function loadState()
   local f = fs.open(STATE_FILE, "r")
   local ok, tbl = pcall(textutils.unserialize, f.readAll())
   f.close()
-  if ok and type(tbl)=="table" then state=tbl; return true end
+  if ok and type(tbl)=="table" then state = tbl return true end
   return false
 end
 
@@ -27,23 +29,20 @@ local function deleteState()
   if fs.exists(STATE_FILE) then fs.delete(STATE_FILE) end
 end
 
--- AUTO-REFUEL (one-shot)
+-- AUTO-REFUEL (one-shot) --------------------------------------------------
 local function tryRefuelOnce()
   local f = turtle.getFuelLevel()
   if f ~= "unlimited" and f <= 0 then
     for s=1,16 do
       turtle.select(s)
-      if turtle.refuel(0) then
-        turtle.refuel()
-        return true
-      end
+      if turtle.refuel(0) then turtle.refuel() return true end
     end
     return false
   end
   return true
 end
 
--- TURN/ORIENT
+-- TURN AND FACING ---------------------------------------------------------
 local function turnLeft()
   turtle.turnLeft()
   state.dir = (state.dir + 3) % 4
@@ -55,22 +54,18 @@ local function turnRight()
 end
 
 local function faceDir(target)
-  -- rotate right until we hit target
   while state.dir ~= target do
     turnRight()
   end
 end
 
--- MOVEMENT
+-- MOVEMENT ----------------------------------------------------------------
 local function moveForward()
   if not tryRefuelOnce() then
     print("✘ No fuel to move forward!") return false
   end
-  while turtle.detect() do turtle.dig() end      -- only clear front
-  if not turtle.forward() then
-    print("✘ Blocked at ("..state.x..","..state.y..","..state.z..")")
-    return false
-  end
+  while turtle.detect() do turtle.dig() end
+  if not turtle.forward() then return false end
   if     state.dir==0 then state.x = state.x + 1
   elseif state.dir==1 then state.z = state.z + 1
   elseif state.dir==2 then state.x = state.x - 1
@@ -83,124 +78,121 @@ local function moveUp()
   if not tryRefuelOnce() then
     print("✘ No fuel to move up!") return false
   end
-  while turtle.detectUp() do turtle.digUp() end  -- only clear above
-  if not turtle.up() then
-    print("✘ Can't ascend at layer "..state.y) return false
-  end
+  while turtle.detectUp() do turtle.digUp() end
+  if not turtle.up() then return false end
   state.y = state.y + 1
   return true
 end
 
--- DIG & MOVE
 local function digAndMoveForward()
   return moveForward()
 end
 
--- RETURN TO START OF CURRENT LAYER (1,1) AND FACE +X
+-- RETURN TO LAYER START --------------------------------------------------
 local function returnToLayerStart()
-  -- X axis
+  -- return along X to x=1
   local dx = 1 - state.x
   if dx ~= 0 then
-    local dirX = (dx > 0) and 0 or 2
+    local dirX = dx > 0 and 0 or 2
     faceDir(dirX)
     for i=1, math.abs(dx) do
-      if not moveForward() then
-        print("✘ Couldn't return on X axis") return false
-      end
+      if not moveForward() then return false end
     end
   end
-  -- Z axis
+  -- return along Z to z=1
   local dz = 1 - state.z
   if dz ~= 0 then
-    local dirZ = (dz > 0) and 1 or 3
+    local dirZ = dz > 0 and 1 or 3
     faceDir(dirZ)
     for i=1, math.abs(dz) do
-      if not moveForward() then
-        print("✘ Couldn't return on Z axis") return false
-      end
+      if not moveForward() then return false end
     end
   end
   state.x, state.z = 1, 1
   saveState()
-  faceDir(0)  -- face +X
+  faceDir(0)  -- face +X for next dig
   return true
 end
 
--- STARTUP: RESUME PROMPT
+-- STARTUP: LOAD & PROMPT RESUME -------------------------------------------
 local resumed = loadState()
-local origY   = state.y
 if resumed then
   print("Resume previous session? (y/n)")
   if read():lower() ~= "y" then
     deleteState()
-    state = { x=1, y=1, z=1, dir=0 }
-    origY = 1
+    state = { x=1, y=1, z=1, dir=0, stage="dig" }
   else
-    print("Resuming at X="..state.x.." Y="..state.y.." Z="..state.z)
+    print(string.format("Resuming at X=%d Y=%d Z=%d (stage=%s)", state.x, state.y, state.z, state.stage))
   end
+else
+  saveState()
 end
 
--- MAIN EXCAVATION
-for y = state.y, Y do
-  state.y = y
-
-  -- if starting a new layer (beyond original), return to (1,1) then ascend
-  if y > origY then
-    if not returnToLayerStart() then return end
-    if not moveUp()               then return end
-    -- after ascending, ensure facing +X
-    faceDir(0)
+-- MAIN LOOP ---------------------------------------------------------------
+while true do
+  -- check completion
+  if state.y > Y then
+    deleteState()
+    print("✅ Box excavation complete!")
+    return
   end
 
-  -- determine starting Z for resumed layer
-  local startZ = (y==origY) and state.z or 1
-
-  for z = startZ, Z do
-    state.z = z
-
-    -- determine X traversal direction for snake pattern
-    local xStart, xEnd, xStep
-    if z % 2 == 1 then
-      xStart, xEnd, xStep = 1, X, 1
-    else
-      xStart, xEnd, xStep = X, 1, -1
+  if state.stage == "return" then
+    -- return to start of current layer
+    if not returnToLayerStart() then
+      error("Failed to return to layer start.")
     end
+    state.stage = "ascend"
+    saveState()
+  end
 
-    -- resume X only on first row of resumed layer
-    local firstX = (y==origY and z==startZ) and state.x or xStart
+  if state.stage == "ascend" then
+    -- move up one layer
+    if not moveUp() then
+      error("Failed to ascend from layer Y="..state.y)
+    end
+    state.stage = "dig"
+    state.x, state.z = 1, 1
+    saveState()
+  end
 
-    for x = firstX, xEnd, xStep do
-      state.x = x
+  if state.stage == "dig" then
+    -- dig current layer
+    for z = state.z, Z do
+      state.z = z
       saveState()
-      -- if not the very last cell, dig & move
-      if not (x==xEnd and z==Z and y==Y) then
-        if not digAndMoveForward() then
-          print("Halting at X="..state.x.." Y="..state.y.." Z="..state.z)
-          return
+
+      -- determine X traversal
+      local xStart, xEnd, xStep = 1, X, 1
+      if z % 2 == 0 then xStart, xEnd, xStep = X, 1, -1 end
+      local startX = (z == state.z) and state.x or xStart
+
+      for x = startX, xEnd, xStep do
+        state.x = x
+        saveState()
+        if not (state.y==Y and z==Z and x==xEnd) then
+          if not digAndMoveForward() then
+            print(string.format("Halting at X=%d Y=%d Z=%d", state.x, state.y, state.z))
+            return
+          end
         end
+      end
+
+      -- move to next Z row if not last
+      if z < Z then
+        -- face toward +Z
+        faceDir(1)
+        if not digAndMoveForward() then error("Failed to step to next row.") end
+        -- face proper X direction
+        if z % 2 == 1 then faceDir(2) else faceDir(0) end
+        state.x = xEnd
+        state.z = z + 1
+        saveState()
       end
     end
 
-    -- move into next Z-row if any
-    if z < Z then
-      -- turn toward +Z
-      if     state.dir==0 then turnRight()
-      elseif state.dir==2 then turnLeft() end
-
-      if not digAndMoveForward() then return end
-
-      -- turn back toward +X or -X
-      if z % 2 == 1 then turnRight() else turnLeft() end
-
-      state.x = xEnd
-      saveState()
-    end
+    -- layer finished: prepare to return
+    state.stage = "return"
+    saveState()
   end
-
-  -- reset for next layer (will be handled by returnToLayerStart)
-  origY = origY  -- no-op
 end
-
--- CLEANUP
-deleteState()
-print("✅ Box excavation complete!")
