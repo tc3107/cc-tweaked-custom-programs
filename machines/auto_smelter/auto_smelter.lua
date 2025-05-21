@@ -1,5 +1,5 @@
 -- Smart AutoSmelter for CC:Tweaked
--- Fully integrated with robust error handling and detailed diagnostics
+-- Enhanced with robust error reporting and streamlined output
 
 -- Configuration files
 local FURNACES_FILE       = "furnaces.txt"
@@ -127,17 +127,12 @@ local function buildInventoryIndex(storageNames)
             if not index[name] then index[name] = { total = 0, sources = {} } end
             index[name].total = index[name].total + count
             table.insert(index[name].sources, { chest = chest, slot = slot, count = count })
-          else
-            print("[WARN] Skipping invalid item in " .. chest .. " slot " .. slot)
           end
         end
       end
     end
   end
-  if next(index) then
-    print("[DEBUG] Indexed items:")
-    for k, v in pairs(index) do print(" - " .. k .. ": " .. v.total) end
-  else
+  if not next(index) then
     print("[WARN] Inventory index is empty.")
   end
   return index
@@ -152,7 +147,6 @@ local function monitorFuel(furnaces, storageNames)
       local fuelDetail = f.per.getItemDetail(2)
       local fuelCount = (fuelDetail and fuelDetail.count) or 0
       if fuelCount < MAX_FUEL_THRESHOLD then
-        -- Calculate coal needed based on input items
         local inDetail = f.per.getItemDetail(1)
         local toSmelt   = (inDetail and inDetail.count) or 0
         local neededCoal = math.ceil(toSmelt / FUEL_PER_COAL)
@@ -229,13 +223,10 @@ local function smeltMain(furnaces, storageNames)
     end
     if not fullName then
       print("[ERROR] '"..choice.."' not in smeltable list.")
-      if #suggestions>0 then
-        print("Suggestions:") for _, s in ipairs(suggestions) do print(" - "..s) end
-      end
+      if #suggestions>0 then print("Suggestions:") for _, s in ipairs(suggestions) do print(" - "..s) end end
       goto continue_prompt
     end
 
-    -- Build index and verify
     local index = buildInventoryIndex(storageNames)
     if not next(index) then print("[ERROR] No items indexed. Check storage connections.") return end
 
@@ -250,12 +241,11 @@ local function smeltMain(furnaces, storageNames)
       goto continue_prompt
     end
 
-    -- Distribute items evenly
     local perF = math.floor(qty / #furnaces)
     local rem  = qty % #furnaces
     for i, f in ipairs(furnaces) do
-      local target    = perF + (i<=rem and 1 or 0)
-      local movedTotal= 0
+      local target     = perF + (i<=rem and 1 or 0)
+      local movedTotal = 0
       if target>0 then
         local inDet = f.per.getItemDetail(1)
         local used  = (inDet and inDet.count) or 0
@@ -264,8 +254,8 @@ local function smeltMain(furnaces, storageNames)
         local remSend= toSend
         for _, src in ipairs(index[fullName].sources) do
           if remSend<=0 then break end
-          local chPer = peripheral.wrap(src.chest)
-          local moved = chPer.pushItems(f.name, src.slot, remSend, 1)
+          local chPer  = peripheral.wrap(src.chest)
+          local moved  = chPer.pushItems(f.name, src.slot, remSend, 1)
           if moved and moved>0 then remSend=remSend-moved; movedTotal=movedTotal+moved end
         end
       end
