@@ -14,6 +14,8 @@ supplementaries:ash=minecraft:chest_25
 cgm:shell=minecraft:chest_39
 cgm:advanced_bullet=minecraft:chest_38
 cgm:basic_bullet=minecraft:chest_40,minecraft:chest_41
+minecraft:moss_block:minecraft_chest_26
+minecraft:moss_carpet:minecraft_chest_26
 
 # Wood
 minecraft:spruce_log=minecraft:chest_27
