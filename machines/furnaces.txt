@@ -1,0 +1,4 @@
+minecraft:furnace_2
+minecraft:furnace_3
+minecraft:furnace_4
+minecraft:furnace_5
