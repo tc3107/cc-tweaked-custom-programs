@@ -28,8 +28,7 @@ local function readLines(path)
   local content = file.readAll()
   file.close()
   local lines = {}
-  for line in content:gmatch("([^
-]+)") do
+  for line in content:gmatch("([^]+)") do
     line = trim(line)
     if #line > 0 then table.insert(lines, line) end
   end
