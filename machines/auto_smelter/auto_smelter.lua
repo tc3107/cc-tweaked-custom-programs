@@ -146,9 +146,6 @@ local function collectOutput(furnaces)
     local out = f.per.getItemDetail(3)
     if out and out.count and out.count > 0 then
       local moved = f.per.pushItems(OUTPUT_CHEST, 3, out.count)
-      if moved and moved > 0 then
-        print("\n[INFO] Collected " .. moved .. " from " .. f.name .. " output slot")
-      end
     end
   end
 end
