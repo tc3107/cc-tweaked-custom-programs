@@ -7,14 +7,14 @@ local SMELTABLE_FILE      = "smeltable.txt"
 local COAL_ITEM           = "minecraft:coal"
 local FUEL_PER_COAL       = 8            -- smelts provided per coal piece
 local MAX_FUEL_THRESHOLD  = 2            -- refill when fuel count falls below this
-local PROGRESS_BAR_LENGTH = 10           -- characters in the progress bar
+local PROGRESS_BAR_WIDTH  = 8            -- characters in the progress bar
 
 -- Utility: trim whitespace
 local function trim(s)
   return (s or ""):match("^%s*(.-)%s*$")
 end
 
--- Utility: read all lines with error reporting
+-- Read all lines with error reporting
 local function readLines(path)
   if not fs.exists(path) then
     print("[ERROR] File not found: " .. path)
@@ -35,7 +35,7 @@ local function readLines(path)
   return lines
 end
 
--- Utility: write all lines with error reporting
+-- Write all lines with error reporting
 local function writeLines(path, lines)
   local file, err = fs.open(path, "w")
   if not file then
@@ -55,7 +55,7 @@ local function ensureFile(path)
       print("[ERROR] Failed to create file " .. path .. ": " .. tostring(fileOrErr))
     else
       fileOrErr.close()
-      print("[INFO] Created missing config file: " .. path)
+      print("[INFO] Created missing file: " .. path)
     end
   end
 end
@@ -82,8 +82,8 @@ local function loadFurnaces()
       print("[INFO] Loaded " .. #furnaces .. " furnaces from " .. FURNACES_FILE)
       return furnaces
     end
-    print("[ERROR] No valid furnaces configured in " .. FURNACES_FILE)
-    print("Please add furnace peripheral names (one per line), then press Enter to retry...")
+    print("[ERROR] No valid furnaces in " .. FURNACES_FILE)
+    print("Add furnace peripheral names (one per line), then press Enter to retry...")
     read()
   end
 end
@@ -102,9 +102,9 @@ local function getStoragePeripherals(furnaces)
     end
   end
   if #storage == 0 then
-    print("[WARN] No storage peripherals found (excluding furnaces).")
+    print("[WARN] No storage peripherals found (excluding furnaces)")
   else
-    print("[INFO] Found " .. #storage .. " storage peripherals.")
+    print("[INFO] Found " .. #storage .. " storage peripherals")
   end
   return storage
 end
@@ -114,61 +114,60 @@ local function buildInventoryIndex(storageNames)
   local index = {}
   for _, chest in ipairs(storageNames) do
     local per = peripheral.wrap(chest)
-    if not per then
-      print("[ERROR] Could not wrap storage peripheral: " .. chest)
-    else
+    if per then
       local ok, items = pcall(per.list)
-      if not ok or type(items) ~= 'table' then
-        print("[ERROR] Could not list items in " .. chest)
-      else
+      if ok and type(items) == 'table' then
         for slot, item in pairs(items) do
           if item and item.name then
             local name, count = item.name, item.count
-            if not index[name] then index[name] = { total = 0, sources = {} } end
+            index[name] = index[name] or { total = 0, sources = {} }
             index[name].total = index[name].total + count
             table.insert(index[name].sources, { chest = chest, slot = slot, count = count })
           end
         end
+      else
+        print("[ERROR] Could not list items in " .. chest)
       end
+    else
+      print("[ERROR] Could not wrap storage peripheral: " .. chest)
     end
   end
   if not next(index) then
-    print("[WARN] Inventory index is empty.")
+    print("[WARN] Inventory index is empty")
   end
   return index
 end
 
 -- Dynamic fuel monitoring coroutine
-local function monitorFuel(furnaces, storageNames)
-  local warnedCoalMissing = false
+local function monitorFuel(furnaces, storage)
+  local warnedCoal = false
   while true do
-    local index = buildInventoryIndex(storageNames)
+    local idx = buildInventoryIndex(storage)
     for _, f in ipairs(furnaces) do
-      local fuelDetail = f.per.getItemDetail(2)
-      local fuelCount = (fuelDetail and fuelDetail.count) or 0
+      local fuel = f.per.getItemDetail(2)
+      local fuelCount = (fuel and fuel.count) or 0
       if fuelCount < MAX_FUEL_THRESHOLD then
-        local inDetail = f.per.getItemDetail(1)
-        local toSmelt   = (inDetail and inDetail.count) or 0
-        local neededCoal = math.ceil(toSmelt / FUEL_PER_COAL)
-        local give       = math.max(1, neededCoal - fuelCount)
-        local coalEntry  = index[COAL_ITEM]
+        local inDet = f.per.getItemDetail(1)
+        local toSmelt = (inDet and inDet.count) or 0
+        local needed = math.ceil(toSmelt / FUEL_PER_COAL)
+        local give = math.max(1, needed - fuelCount)
+        local coalEntry = idx[COAL_ITEM]
         if coalEntry and coalEntry.total > 0 then
-          local remaining = give
-          for _, src in ipairs(coalEntry.sources) do
-            if remaining <= 0 then break end
-            local chestPer = peripheral.wrap(src.chest)
-            local moved = chestPer.pushItems(f.name, src.slot, remaining, 2)
-            if moved and moved > 0 then remaining = remaining - moved end
+          local rem = give
+          for _, s in ipairs(coalEntry.sources) do
+            if rem <= 0 then break end
+            local srcPer = peripheral.wrap(s.chest)
+            local moved = srcPer.pushItems(f.name, s.slot, rem, 2)
+            if moved and moved > 0 then rem = rem - moved end
           end
-          local actual = give - remaining
-          if actual > 0 then
-            print(string.format("[INFO] Refueled %d coal into %s (was %d)", actual, f.name, fuelCount))
+          if give - rem > 0 then
+            print("[INFO] Refueled " .. (give-rem) .. " coal into " .. f.name)
           end
-          warnedCoalMissing = false
+          warnedCoal = false
         else
-          if not warnedCoalMissing then
-            print("[ERROR] "..COAL_ITEM.." not found in storage network!")
-            warnedCoalMissing = true
+          if not warnedCoal then
+            print("[ERROR] " .. COAL_ITEM .. " unavailable in storage network")
+            warnedCoal = true
           end
         end
       end
@@ -177,98 +176,91 @@ local function monitorFuel(furnaces, storageNames)
   end
 end
 
--- Display real-time smelting progress
+-- Display real-time smelting progress (input only)
 local function displayProgress(furnaces)
   local capacity = #furnaces * 64
-  local _, startY = term.getCursorPos()
+  local _, y = term.getCursorPos()
   while true do
-    local totalItems = 0
+    local totalIn = 0
     for _, f in ipairs(furnaces) do
-      for slot=1,3 do
-        local d = f.per.getItemDetail(slot)
-        if d then totalItems = totalItems + d.count end
-      end
+      local inDet = f.per.getItemDetail(1)
+      if inDet then totalIn = totalIn + inDet.count end
     end
-    if totalItems == 0 then break end
-    local pct    = math.floor((totalItems / capacity) * 100)
-    local filled = math.floor((pct / 100) * PROGRESS_BAR_LENGTH)
-    local bar    = string.rep("█", filled) .. string.rep("░", PROGRESS_BAR_LENGTH - filled)
-    term.setCursorPos(1, startY)
+    if totalIn == 0 then break end
+    local pct = math.floor((totalIn / capacity) * 100)
+    local filled = math.floor((pct / 100) * PROGRESS_BAR_WIDTH)
+    local bar = string.rep("#", filled) .. string.rep("-", PROGRESS_BAR_WIDTH - filled)
+    term.setCursorPos(1, y)
     term.clearLine()
-    write(string.format("Progress: [%s] %3d%% (%d/%d)\n", bar, pct, totalItems, capacity))
+    write(string.format("Progress:[%s]%d%% %d/%d", bar, pct, totalIn, capacity))
     sleep(1)
   end
-  print("[SUCCESS] Smelting complete, all furnaces are empty.")
+  print("[SUCCESS] Smelting complete: all input slots empty")
 end
 
--- Main smelting logic with safety checks and user feedback
-local function smeltMain(furnaces, storageNames)
+-- Main smelting logic with hardened indexing
+local function smeltMain(furnaces, storage)
   ensureFile(SMELTABLE_FILE)
   local list = readLines(SMELTABLE_FILE)
   local smeltable = {}
   for _, item in ipairs(list) do smeltable[item] = true end
-  if #list == 0 then print("[WARN] No smeltable items defined in "..SMELTABLE_FILE) end
+  if #list == 0 then print("[WARN] No smeltable items defined in " .. SMELTABLE_FILE) end
 
   while true do
-    io.write("Enter item to smelt (or 'skip'): ")
+    io.write("Item to smelt (or 'skip'): ")
     local choice = trim(read() or "")
     if choice:lower() == "skip" then break end
-
-    -- Normalize and match
     local norm = choice:lower():gsub("%s+", "_")
-    local fullName, suggestions = nil, {}
+    local fullName, sug = nil, {}
     for item in pairs(smeltable) do
-      if item:find(norm, 1, true) then fullName = item end
-      if #suggestions < 5 and item:find(norm) then table.insert(suggestions, item) end
+      if item:find(norm,1,true) then fullName = item end
+      if #sug<5 and item:find(norm) then table.insert(sug,item) end
     end
     if not fullName then
-      print("[ERROR] '"..choice.."' not in smeltable list.")
-      if #suggestions>0 then print("Suggestions:") for _, s in ipairs(suggestions) do print(" - "..s) end end
-      goto continue_prompt
+      print("[ERROR] '"..choice.."' not in smeltable list")
+      if #sug>0 then print("Did you mean:") for _,s in ipairs(sug) do print("- "..s) end end
+      goto cont
     end
 
-    local index = buildInventoryIndex(storageNames)
-    if not next(index) then print("[ERROR] No items indexed. Check storage connections.") return end
-
-    local available = (index[fullName] and index[fullName].total) or 0
-    local maxCap    = #furnaces * 64
-    print(string.format("[INFO] Available: %d | Furnace capacity: %d", available, maxCap))
+    local idx = buildInventoryIndex(storage)
+    local entry = idx[fullName]
+    if not entry then
+      print("[ERROR] No '"..fullName.."' found in storage")
+      return
+    end
+    local available = entry.total
+    local maxCap = #furnaces * 64
+    print(string.format("[INFO] Found %d %s | Capacity: %d", available, fullName, maxCap))
 
     io.write("Quantity to smelt: ")
     local qty = tonumber(trim(read() or ""))
     if not qty or qty<1 or qty>available or qty>maxCap then
-      print("[ERROR] Invalid quantity. Must be between 1 and "..math.min(available, maxCap))
-      goto continue_prompt
+      print("[ERROR] Choose 1 to "..math.min(available,maxCap))
+      goto cont
     end
 
-    local perF = math.floor(qty / #furnaces)
-    local rem  = qty % #furnaces
-    for i, f in ipairs(furnaces) do
-      local target     = perF + (i<=rem and 1 or 0)
-      local movedTotal = 0
+    local perF = math.floor(qty/#furnaces)
+    local rem = qty%#furnaces
+    for i,f in ipairs(furnaces) do
+      local target = perF + (i<=rem and 1 or 0)
+      local moved = 0
       if target>0 then
         local inDet = f.per.getItemDetail(1)
-        local used  = (inDet and inDet.count) or 0
-        local free  = 64 - used
-        local toSend= math.min(target, free)
-        local remSend= toSend
-        for _, src in ipairs(index[fullName].sources) do
-          if remSend<=0 then break end
-          local chPer  = peripheral.wrap(src.chest)
-          local moved  = chPer.pushItems(f.name, src.slot, remSend, 1)
-          if moved and moved>0 then remSend=remSend-moved; movedTotal=movedTotal+moved end
+        local used = (inDet and inDet.count) or 0
+        local free = 64 - used
+        local send = math.min(target,free)
+        for _,s in ipairs(entry.sources) do
+          if send<=0 then break end
+          local srcPer=peripheral.wrap(s.chest)
+          local ok=srcPer.pushItems(f.name,s.slot,send,1)
+          if ok and ok>0 then moved=moved+ok; send=send-ok end
         end
       end
-      if movedTotal<target then
-        print(string.format("[WARN] Furnace %d: moved %d of %d", i, movedTotal, target))
-      else
-        print(string.format("[INFO] Furnace %d: received %d %s", i, movedTotal, fullName))
-      end
+      print(string.format("Furnace %d: moved %d of %d",i,moved,target))
     end
     break
-    ::continue_prompt::
+    ::cont::
   end
-
   displayProgress(furnaces)
 end
 
@@ -277,13 +269,12 @@ local function main()
   ensureFile(FURNACES_FILE)
   ensureFile(SMELTABLE_FILE)
   local furnaces = loadFurnaces()
-  local storage   = getStoragePeripherals(furnaces)
-  if #storage==0 then print("[WARN] No storage peripherals; cannot fetch items.") end
+  local storage = getStoragePeripherals(furnaces)
+  if #storage==0 then print("[WARN] No storage found; cannot smelt") end
   parallel.waitForAll(
-    function() monitorFuel(furnaces, storage) end,
-    function() smeltMain(furnaces, storage) end
+    function() monitorFuel(furnaces,storage) end,
+    function() smeltMain(furnaces,storage) end
   )
 end
 
--- Execute
 main()
