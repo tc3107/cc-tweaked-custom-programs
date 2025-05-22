@@ -125,8 +125,14 @@ local function scannerThread()
       if cnt > 0 then allInputEmpty = false end
 
       local ok2, outD = pcall(f.per.getItemDetail, 3)
-      if ok2 and outD and outD.count > 0 then
-        f.per.pushItems(OUTPUT_CHEST, 3, outD.count)
+      if ok2 and outD then
+        if outD.count > 0 then
+          f.per.pushItems(OUTPUT_CHEST, 3, outD.count)
+          allOutputEmpty = false
+        else
+          allOutputEmpty = allOutputEmpty and true
+        end
+      else
         allOutputEmpty = false
       end
 
@@ -160,6 +166,21 @@ local function scannerThread()
     end
   end
 end
+
+-- Main execution ----------------------------------------------------------
+local function main()
+  displayStatus("Initializing systems...")
+  ensureFile(FURNACES_FILE)
+  ensureFile(FUELS_FILE)
+  loadFurnaces()
+  getStorage()
+  loadFuels()
+  parallel.waitForAll(scannerThread, insertionThread, displayThread)
+  displayStatus("System offline...")
+end
+
+main()
+
 
 -- Display thread ---------------------------------------------------------
 local function displayThread()
