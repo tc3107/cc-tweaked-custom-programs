@@ -4,8 +4,8 @@
 -- Configuration files and settings
 local FURNACES_FILE       = "furnaces.txt"
 local SMELTABLE_FILE      = "smeltable.txt"
+local FUELS_FILE          = "fuels.txt"   -- new fuels list file
 local OUTPUT_CHEST        = "minecraft:chest_X"
-local COAL_ITEM           = "minecraft:coal"
 local FUEL_PER_COAL       = 8            -- smelts per coal
 local MAX_FUEL_THRESHOLD  = 2            -- refill threshold
 local PROGRESS_BAR_WIDTH  = 20           -- characters in progress bar
@@ -49,6 +49,15 @@ local function loadFurnaces()
     if #fsList>0 then return fsList end
     sleep(CHECK_INTERVAL)
   end
+end
+
+-- Load fuels in order
+local function loadFuels()
+  ensureFile(FUELS_FILE)
+  local lines = readLines(FUELS_FILE)
+  local fuels = {}
+  for _, line in ipairs(lines) do table.insert(fuels, line) end
+  return fuels
 end
 
 -- Discover storage (exclude furnaces)
@@ -102,6 +111,7 @@ local function monitorFurnaces(furnaces,storage)
   local warned=false
   while true do
     collectOutput(furnaces)
+    local fuels = loadFuels()
     local idx=buildIndex(storage)
     for _,f in ipairs(furnaces) do
       local fuel=f.per.getItemDetail(2)
@@ -109,19 +119,22 @@ local function monitorFurnaces(furnaces,storage)
       if fc<MAX_FUEL_THRESHOLD then
         local inD=f.per.getItemDetail(1)
         local needed=math.max(1,math.ceil(((inD and inD.count)or 0)/FUEL_PER_COAL)-fc)
-        local entry=idx[COAL_ITEM]
-        if entry and entry.total>0 then
-          local rem=needed
-          for _,src in ipairs(entry.sources) do
-            if rem<=0 then break end
-            local cp=peripheral.wrap(src.chest)
-            local mv=cp.pushItems(f.name,src.slot,rem,2)
-            if mv and mv>0 then rem=rem-mv end
+        local refueled=false
+        for _,fuelName in ipairs(fuels) do
+          local entry=idx[fuelName]
+          if entry and entry.total>0 then
+            local rem=needed
+            for _,src in ipairs(entry.sources) do
+              if rem<=0 then break end
+              local cp=peripheral.wrap(src.chest)
+              local mv=cp.pushItems(f.name,src.slot,rem,2)
+              if mv and mv>0 then rem=rem-mv end
+            end
+            refueled=true
+            break
           end
-          warned=false
-        else
-          if not warned then warned=true end
         end
+        warned=not refueled
       end
     end
     sleep(CHECK_INTERVAL)
@@ -204,6 +217,7 @@ end
 local function main()
   ensureFile(FURNACES_FILE)
   ensureFile(SMELTABLE_FILE)
+  ensureFile(FUELS_FILE)
   local furnaces=loadFurnaces()
   local storage=getStorage(furnaces)
   parallel.waitForAll(
