@@ -4,7 +4,7 @@
 local FURNACES_FILE       = "furnaces.txt"
 local SMELTABLE_FILE      = "smeltable.txt"
 local FUELS_FILE          = "fuels.txt"
-local OUTPUT_CHEST        = "minecraft:chest_X"
+local OUTPUT_CHEST        = "minecraft:chest_43"
 local MAX_FUEL_THRESHOLD  = 4
 local PROGRESS_BAR_WIDTH  = 20
 local CHECK_INTERVAL      = 0.5
@@ -97,6 +97,7 @@ end
 
 -- Scanner thread ---------------------------------------------------------
 local function scannerThread()
+  print("[INFO] Scanning fuel levels...")
   local idx
   while not done do
     idx = buildIndex()
@@ -205,22 +206,40 @@ local function insertionThread()
   for name in pairs(smeltable) do
     if name:find(norm, 1, true) then target = name end
   end
-  if not target then error("Unknown smeltable: "..input) end
+  if not target then
+    print("[ERROR] Unknown smeltable: " .. input)
+    return
+  end
 
   local idx = buildIndex()
   local entry = idx[target]
-  if not entry then error("No items to smelt: "..target) end
+  if not entry or #entry == 0 then
+    print("[ERROR] No items to smelt: " .. target)
+    return
+  end
+
   local totalAvail = 0
   for _, slot in ipairs(entry) do
     local p = peripheral.wrap(slot.chest)
     local info = p.getItemDetail(slot.slot)
-    totalAvail = totalAvail + (info and info.count or 0)
+    if info and info.count and info.count > 0 then
+      totalAvail = totalAvail + info.count
+    end
+  end
+
+  if totalAvail == 0 then
+    print("[ERROR] No items to smelt: " .. target)
+    return
   end
 
   io.write(string.format("Found %d %s\n", totalAvail, target))
   io.write("Qty to smelt: ")
   local q = tonumber(trim(read() or ""))
-  assert(q and q > 0 and q <= totalAvail, "Invalid quantity")
+  if not q or q <= 0 or q > totalAvail then
+    print("[ERROR] Invalid quantity")
+    return
+  end
+
   progressCapacity = q + totalInFurnaces
 
   local perF = math.floor(q / #furnaces)
