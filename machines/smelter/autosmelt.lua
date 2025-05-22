@@ -8,7 +8,7 @@ local OUTPUT_CHEST        = "minecraft:chest_43"
 local MAX_FUEL_THRESHOLD  = 4
 local PROGRESS_BAR_WIDTH  = 20
 local CHECK_INTERVAL      = 0.5
-local TEXT_SCALE = 1
+local TEXT_SCALE = 2
 
 -- State variables
 local furnaces = {}
@@ -16,7 +16,6 @@ local storage  = {}
 local fuels    = {}
 local itemCounts = {}
 local progressCapacity = 0
-local done = false
 
 -- Utility functions ------------------------------------------------------
 local function trim(s) return (s or ""):match("^%s*(.-)%s*$") end
@@ -113,27 +112,17 @@ end
 local function scannerThread()
   print("[INFO] Scanning fuel levels...")
   local idx
-  while not done do
+  while true do
     idx = buildIndex()
-    local allInputEmpty = true
-    local allOutputEmpty = true
 
     for _, f in ipairs(furnaces) do
       local ok, inD = pcall(f.per.getItemDetail, 1)
       local cnt = (ok and inD and inD.count) or 0
       itemCounts[f.name] = cnt
-      if cnt > 0 then allInputEmpty = false end
 
       local ok2, outD = pcall(f.per.getItemDetail, 3)
-      if ok2 and outD then
-        if outD.count > 0 then
-          f.per.pushItems(OUTPUT_CHEST, 3, outD.count)
-          allOutputEmpty = false
-        else
-          allOutputEmpty = allOutputEmpty and true
-        end
-      else
-        allOutputEmpty = false
+      if ok2 and outD and outD.count > 0 then
+        f.per.pushItems(OUTPUT_CHEST, 3, outD.count)
       end
 
       local ok3, fuelD = pcall(f.per.getItemDetail, 2)
@@ -155,36 +144,13 @@ local function scannerThread()
       end
     end
 
-    local idxFuel = buildIndex()
-    local anyFuel = false
-    for _, name in ipairs(fuels) do
-      if idxFuel[name] and #idxFuel[name] > 0 then anyFuel = true end
-    end
-
-    if ((allInputEmpty and allOutputEmpty) or not anyFuel) then
-      done = true
-    end
+    sleep(CHECK_INTERVAL)
   end
 end
 
--- Main execution ----------------------------------------------------------
-local function main()
-  displayStatus("Initializing systems...")
-  ensureFile(FURNACES_FILE)
-  ensureFile(FUELS_FILE)
-  loadFurnaces()
-  getStorage()
-  loadFuels()
-  parallel.waitForAll(scannerThread, insertionThread, displayThread)
-  displayStatus("System offline...")
-end
-
-main()
-
-
 -- Display thread ---------------------------------------------------------
 local function displayThread()
-  while progressCapacity == 0 and not done do sleep(0) end
+  while progressCapacity == 0 do sleep(0) end
 
   local mon
   for _, name in ipairs(peripheral.getNames()) do
@@ -196,7 +162,7 @@ local function displayThread()
   end
 
   local y = select(2, term.getCursorPos())
-  while not done do
+  while true do
     local total = 0
     for _, f in ipairs(furnaces) do total = total + (itemCounts[f.name] or 0) end
     local doneCount = progressCapacity - total
@@ -216,8 +182,6 @@ local function displayThread()
 
     sleep(CHECK_INTERVAL)
   end
-  print("\n[SUCCESS] All smelting complete or out of fuel.")
-  if mon then mon.setCursorPos(1,2); mon.write("[SUCCESS]") end
 end
 
 -- Insertion thread --------------------------------------------------------
@@ -302,7 +266,6 @@ local function insertionThread()
   end
 end
 
-
 -- Main execution ----------------------------------------------------------
 local function main()
   displayStatus("Initializing systems...")
@@ -312,7 +275,6 @@ local function main()
   getStorage()
   loadFuels()
   parallel.waitForAll(scannerThread, insertionThread, displayThread)
-  displayStatus("System offline...")
 end
 
 main()
