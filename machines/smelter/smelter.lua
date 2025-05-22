@@ -4,7 +4,7 @@
 -- Configuration files and settings
 local FURNACES_FILE       = "furnaces.txt"
 local SMELTABLE_FILE      = "smeltable.txt"
-local FUELS_FILE          = "fuels.txt"   -- new fuels list file
+local FUELS_FILE          = "fuels.txt"
 local OUTPUT_CHEST        = "minecraft:chest_X"
 local FUEL_PER_COAL       = 8            -- smelts per coal
 local MAX_FUEL_THRESHOLD  = 2            -- refill threshold
