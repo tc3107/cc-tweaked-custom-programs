@@ -8,7 +8,7 @@ local OUTPUT_CHEST        = "minecraft:chest_43"
 local MAX_FUEL_THRESHOLD  = 4
 local PROGRESS_BAR_WIDTH  = 20
 local CHECK_INTERVAL      = 0.5
-local TEXT_SCALE = 2
+local TEXT_SCALE = 1
 
 -- State variables
 local furnaces = {}
