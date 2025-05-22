@@ -1,0 +1,6 @@
+minecraft:bamboo_block
+minecraft:bamboo
+minecraft:coal
+minecraft:charcoal
+minecraft:spruce_log
+minecraft:spruce_planks
