@@ -1,7 +1,5 @@
--- Smart AutoSmelter for CC:Tweaked
--- Streamlined: no refuel/output prints, dynamic progress updates
+-- Smart AutoSmelter with Parallel Threads and Dual Progress Bars (Terminal + Monitor)
 
--- Configuration
 local FURNACES_FILE       = "furnaces.txt"
 local SMELTABLE_FILE      = "smeltable.txt"
 local FUELS_FILE          = "fuels.txt"
@@ -11,7 +9,9 @@ local MAX_FUEL_THRESHOLD  = 2
 local PROGRESS_BAR_WIDTH  = 20
 local CHECK_INTERVAL      = 1
 
--- Utility
+local progressCapacity = 0
+
+-- Utilities
 local function trim(s) return (s or ""):match("^%s*(.-)%s*$") end
 local function readLines(path)
   if not fs.exists(path) then return {} end
@@ -28,7 +28,7 @@ local function ensureFile(path)
   if not fs.exists(path) then local ok,f=pcall(fs.open,path,"w") if ok and f then f.close() end end
 end
 
--- Loaders
+-- Peripheral loading
 local function loadFurnaces()
   ensureFile(FURNACES_FILE)
   while true do
@@ -83,20 +83,24 @@ local function buildIndex(storage)
   return idx
 end
 
--- Smelting control
+-- Output collection
 local function collectOutput(furnaces)
-  for _,f in ipairs(furnaces) do
-    local out=f.per.getItemDetail(3)
-    if out and out.count>0 then
-      f.per.pushItems(OUTPUT_CHEST,3,out.count)
+  while true do
+    for _,f in ipairs(furnaces) do
+      local out=f.per.getItemDetail(3)
+      if out and out.count>0 then
+        f.per.pushItems(OUTPUT_CHEST,3,out.count)
+      end
     end
+    sleep(CHECK_INTERVAL)
   end
 end
-local function monitorFurnaces(furnaces,storage)
+
+-- Fuel management
+local function manageFuel(furnaces,storage)
   while true do
-    collectOutput(furnaces)
     local fuels = loadFuels()
-    local idx=buildIndex(storage)
+    local idx = buildIndex(storage)
     for _,f in ipairs(furnaces) do
       local fuel=f.per.getItemDetail(2)
       local fc=(fuel and fuel.count) or 0
@@ -122,9 +126,8 @@ local function monitorFurnaces(furnaces,storage)
   end
 end
 
--- Updated Progress Bar
-local function displayProgress(furnaces)
-  local capacity = #furnaces * 64
+-- Terminal progress bar
+local function displayProgressTerminal(furnaces)
   local y = select(2, term.getCursorPos())
   while true do
     local total = 0
@@ -132,67 +135,108 @@ local function displayProgress(furnaces)
       local inD = f.per.getItemDetail(1)
       if inD then total = total + inD.count end
     end
-    local pct = math.floor((1 - total / capacity) * 100)
+    local done = progressCapacity - total
+    local pct = math.floor(done / progressCapacity * 100)
     local filled = math.floor(pct / 100 * PROGRESS_BAR_WIDTH)
     local bar = string.rep("#", filled) .. string.rep("-", PROGRESS_BAR_WIDTH - filled)
     term.setCursorPos(1, y)
     term.clearLine()
-    write(string.format("Progress:[%s]%d%% %d/%d", bar, pct, capacity - total, capacity))
+    write(string.format("Progress:[%s]%d%% %d/%d", bar, pct, done, progressCapacity))
     if total == 0 then break end
     sleep(CHECK_INTERVAL)
   end
   print("\n[SUCCESS] All input slots empty.")
 end
 
--- Updated Smelting Main (no progress prints per furnace)
-local function smeltMain(furnaces,storage)
+-- Monitor progress bar
+local function displayProgressMonitor(furnaces)
+  local mon = nil
+  for _, name in ipairs(peripheral.getNames()) do
+    if peripheral.getType(name) == "monitor" then
+      mon = peripheral.wrap(name)
+      break
+    end
+  end
+  if not mon then return end
+  mon.setTextScale(0.5)
+  mon.clear()
+  while true do
+    local total = 0
+    for _, f in ipairs(furnaces) do
+      local inD = f.per.getItemDetail(1)
+      if inD then total = total + inD.count end
+    end
+    local done = progressCapacity - total
+    local pct = math.floor(done / progressCapacity * 100)
+    local filled = math.floor(pct / 100 * PROGRESS_BAR_WIDTH)
+    local bar = string.rep("#", filled) .. string.rep("-", PROGRESS_BAR_WIDTH - filled)
+
+    mon.setCursorPos(1,1)
+    mon.clearLine()
+    mon.write(string.format("Progress: [%s] %d%%", bar, pct))
+
+    if total == 0 then break end
+    sleep(CHECK_INTERVAL)
+  end
+  mon.setCursorPos(1,2)
+  mon.write("[SUCCESS] Done")
+end
+
+-- Insert smeltables
+local function insertSmeltables(furnaces,storage)
   ensureFile(SMELTABLE_FILE)
   local list=readLines(SMELTABLE_FILE)
   local smeltable={}
   for _,i in ipairs(list) do smeltable[i]=true end
-  while true do
-    io.write("Item to smelt (or 'skip'): ")
-    local c=trim(read() or "") if c:lower()=="skip" then break end
-    local norm=c:lower():gsub("%s+","_")
-    local full=nil
-    for item in pairs(smeltable) do if item:find(norm,1,true) then full=item end end
-    if not full then goto cont end
-    local idx=buildIndex(storage)
-    local entry=idx[full] if not entry then return end
-    local avail=entry.total
-    local cap=#furnaces*64
-    io.write(string.format("Found %d %s | Cap %d\n",avail,full,cap))
-    io.write("Qty to smelt: ")
-    local q=tonumber(trim(read() or ""))
-    if not q or q<1 or q>avail or q>cap then goto cont end
-    local perF=math.floor(q/#furnaces)
-    local rem=q%#furnaces
-    for i,f in ipairs(furnaces) do
-      local tgt=perF+(i<=rem and 1 or 0)
-      local send=tgt
-      for _,s in ipairs(entry.sources) do
-        if send<=0 then break end
-        local cp=peripheral.wrap(s.chest)
-        local ok=cp.pushItems(f.name,s.slot,send,1)
-        if ok and ok>0 then send=send-ok end
-      end
-    end
-    break
-    ::cont::
+
+  io.write("Item to smelt (or 'skip'): ")
+  local c=trim(read() or "") if c:lower()=="skip" then
+    progressCapacity = #furnaces * 64
+    return
   end
-  displayProgress(furnaces)
+  local norm=c:lower():gsub("%s+","_")
+  local full=nil
+  for item in pairs(smeltable) do if item:find(norm,1,true) then full=item end end
+  if not full then return end
+
+  local idx=buildIndex(storage)
+  local entry=idx[full] if not entry then return end
+  local avail=entry.total
+  local cap=#furnaces*64
+  io.write(string.format("Found %d %s | Cap %d\n",avail,full,cap))
+  io.write("Qty to smelt: ")
+  local q=tonumber(trim(read() or ""))
+  if not q or q<1 or q>avail or q>cap then return end
+  progressCapacity = q
+
+  local perF=math.floor(q/#furnaces)
+  local rem=q%#furnaces
+  for i,f in ipairs(furnaces) do
+    local tgt=perF+(i<=rem and 1 or 0)
+    local send=tgt
+    for _,s in ipairs(entry.sources) do
+      if send<=0 then break end
+      local cp=peripheral.wrap(s.chest)
+      local ok=cp.pushItems(f.name,s.slot,send,1)
+      if ok and ok>0 then send=send-ok end
+    end
+  end
 end
 
--- Entry
+-- Main
 local function main()
   ensureFile(FURNACES_FILE)
   ensureFile(SMELTABLE_FILE)
   ensureFile(FUELS_FILE)
-  local furnaces=loadFurnaces()
-  local storage=getStorage(furnaces)
-  parallel.waitForAll(
-    function() monitorFurnaces(furnaces,storage) end,
-    function() smeltMain(furnaces,storage) end
+  local furnaces = loadFurnaces()
+  local storage = getStorage(furnaces)
+
+  parallel.waitForAny(
+    function() insertSmeltables(furnaces, storage) end,
+    function() manageFuel(furnaces, storage) end,
+    function() collectOutput(furnaces) end,
+    function() displayProgressTerminal(furnaces) end,
+    function() displayProgressMonitor(furnaces) end
   )
 end
 
