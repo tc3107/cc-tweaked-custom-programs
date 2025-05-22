@@ -17,6 +17,7 @@ cgm:basic_bullet=minecraft:chest_40,minecraft:chest_41
 minecraft:moss_block=minecraft:chest_26
 minecraft:moss_carpet=minecraft:chest_26
 minecraft:coal=minecraft:chest_44
+minecraft:charcoal=minecraft:chest_44
 
 # Wood
 minecraft:spruce_log=minecraft:chest_27
