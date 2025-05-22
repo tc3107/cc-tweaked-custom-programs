@@ -5,9 +5,10 @@ local FURNACES_FILE       = "furnaces.txt"
 local SMELTABLE_FILE      = "smeltable.txt"
 local FUELS_FILE          = "fuels.txt"
 local OUTPUT_CHEST        = "minecraft:chest_X"
-local MAX_FUEL_THRESHOLD  = 2
+local MAX_FUEL_THRESHOLD  = 4
 local PROGRESS_BAR_WIDTH  = 20
-local CHECK_INTERVAL      = 1
+local CHECK_INTERVAL      = 0.5
+local TEXT_SCALE = 2
 
 -- State variables
 local furnaces = {}
@@ -150,7 +151,7 @@ local function displayThread()
     if peripheral.getType(name) == "monitor" then mon = peripheral.wrap(name); break end
   end
   if mon then
-    mon.setTextScale(0.5)
+    mon.setTextScale(TEXT_SCALE)
     mon.clear()
   end
 
