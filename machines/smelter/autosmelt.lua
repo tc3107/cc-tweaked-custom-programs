@@ -101,16 +101,19 @@ local function scannerThread()
   local idx
   while not done do
     idx = buildIndex()
-    local allEmpty = true
+    local allInputEmpty = true
+    local allOutputEmpty = true
+
     for _, f in ipairs(furnaces) do
       local ok, inD = pcall(f.per.getItemDetail, 1)
       local cnt = (ok and inD and inD.count) or 0
       itemCounts[f.name] = cnt
-      if cnt > 0 then allEmpty = false end
+      if cnt > 0 then allInputEmpty = false end
 
       local ok2, outD = pcall(f.per.getItemDetail, 3)
       if ok2 and outD and outD.count > 0 then
         f.per.pushItems(OUTPUT_CHEST, 3, outD.count)
+        allOutputEmpty = false
       end
 
       local ok3, fuelD = pcall(f.per.getItemDetail, 2)
@@ -137,7 +140,8 @@ local function scannerThread()
     for _, name in ipairs(fuels) do
       if idxFuel[name] and #idxFuel[name] > 0 then anyFuel = true end
     end
-    if allEmpty or not anyFuel then
+
+    if ((allInputEmpty and allOutputEmpty) or not anyFuel) then
       done = true
     end
   end
