@@ -1,80 +1,93 @@
--- Smart AutoSmelter with Parallel Threads and Dual Progress Bars (Terminal + Monitor)
+-- Smart AutoSmelter for CC:Tweaked (Reworked Architecture)
 
+-- Configuration files
 local FURNACES_FILE       = "furnaces.txt"
 local SMELTABLE_FILE      = "smeltable.txt"
 local FUELS_FILE          = "fuels.txt"
 local OUTPUT_CHEST        = "minecraft:chest_X"
-local FUEL_PER_COAL       = 8
-local MAX_FUEL_THRESHOLD  = 2
-local PROGRESS_BAR_WIDTH  = 20
-local CHECK_INTERVAL      = 1
+local MAX_FUEL_THRESHOLD  = 2            -- minimum fuel to maintain
+local PROGRESS_BAR_WIDTH  = 20           -- characters in progress bar
+local CHECK_INTERVAL      = 1            -- seconds for display update
 
-local progressCapacity = 0
+-- State variables
+local furnaces = {}         -- list of {name, per}
+local storage  = {}         -- list of chest peripheral names
+local fuels    = {}         -- list of fuel item names
+local itemCounts = {}       -- map furnace.name -> current input count
+local progressCapacity = 0  -- total items to smelt (or full capacity)
+local done = false          -- signal to end all threads
 
--- Utilities
-local function trim(s) return (s or ""):match("^%s*(.-)%s*$") end
+-- Utility functions ------------------------------------------------------
+local function trim(s)
+  return (s or ""):match("^%s*(.-)%s*$")
+end
+
 local function readLines(path)
   if not fs.exists(path) then return {} end
-  local file = fs.open(path, "r") if not file then return {} end
-  local content = file.readAll() file.close()
+  local f = fs.open(path, "r")
+  if not f then return {} end
+  local content = f.readAll()
+  f.close()
   local lines = {}
   for line in content:gmatch("([^\n]+)") do
     line = trim(line)
-    if #line>0 then table.insert(lines,line) end
+    if #line > 0 then table.insert(lines, line) end
   end
   return lines
 end
+
 local function ensureFile(path)
-  if not fs.exists(path) then local ok,f=pcall(fs.open,path,"w") if ok and f then f.close() end end
+  if not fs.exists(path) then
+    local ok, f = pcall(fs.open, path, "w")
+    if ok and f then f.close() end
+  end
 end
 
--- Peripheral loading
+-- Load peripherals -------------------------------------------------------
 local function loadFurnaces()
   ensureFile(FURNACES_FILE)
-  while true do
+  while #furnaces == 0 do
     local names = readLines(FURNACES_FILE)
-    local fsList = {}
-    for _,n in ipairs(names) do
-      if peripheral.isPresent(n) then
-        local ok,per = pcall(peripheral.wrap,n)
-        if ok and per then table.insert(fsList,{name=n,per=per}) end
+    for _, name in ipairs(names) do
+      if peripheral.isPresent(name) then
+        local ok, p = pcall(peripheral.wrap, name)
+        if ok and p then table.insert(furnaces, { name = name, per = p }) end
       end
     end
-    if #fsList>0 then return fsList end
-    sleep(CHECK_INTERVAL)
+    if #furnaces == 0 then sleep(CHECK_INTERVAL) end
   end
 end
+
 local function loadFuels()
   ensureFile(FUELS_FILE)
-  local lines = readLines(FUELS_FILE)
-  local fuels = {}
-  for _, line in ipairs(lines) do table.insert(fuels, line) end
-  return fuels
+  fuels = readLines(FUELS_FILE)
 end
-local function getStorage(furnaces)
-  local furnaceSet={} for _,f in ipairs(furnaces) do furnaceSet[f.name]=true end
-  local list={}
-  for _,n in ipairs(peripheral.getNames()) do
-    if not furnaceSet[n] then
-      local ok,per=pcall(peripheral.wrap,n)
-      if ok and per and type(per.list)=="function" then table.insert(list,n) end
+
+local function getStorage()
+  local set = {}
+  for _, f in ipairs(furnaces) do set[f.name] = true end
+  for _, name in ipairs(peripheral.getNames()) do
+    if not set[name] then
+      local ok, p = pcall(peripheral.wrap, name)
+      if ok and p and type(p.list)=="function" then
+        table.insert(storage, name)
+      end
     end
   end
-  return list
 end
-local function buildIndex(storage)
-  local idx={}
-  for _,chest in ipairs(storage) do
-    local per=peripheral.wrap(chest)
-    if per then
-      local ok,items = pcall(per.list)
+
+-- Build index of items in storage to locate fuel slots ------------------
+local function buildIndex()
+  local idx = {}
+  for _, chest in ipairs(storage) do
+    local p = peripheral.wrap(chest)
+    if p then
+      local ok, items = pcall(p.list)
       if ok and type(items)=="table" then
         for slot,item in pairs(items) do
           if item and item.name then
-            local nm,count=item.name,item.count
-            idx[nm]=idx[nm] or {total=0,sources={}}
-            idx[nm].total=idx[nm].total+count
-            table.insert(idx[nm].sources,{chest=chest,slot=slot,count=count})
+            idx[item.name] = idx[item.name] or {}
+            table.insert(idx[item.name], { chest = chest, slot = slot })
           end
         end
       end
@@ -83,160 +96,171 @@ local function buildIndex(storage)
   return idx
 end
 
--- Output collection
-local function collectOutput(furnaces)
-  while true do
-    for _,f in ipairs(furnaces) do
-      local out=f.per.getItemDetail(3)
-      if out and out.count>0 then
-        f.per.pushItems(OUTPUT_CHEST,3,out.count)
-      end
-    end
-    sleep(CHECK_INTERVAL)
-  end
-end
+-- Scanner thread: manage fuel, collect output, update itemCounts --------
+local function scannerThread()
+  local idx
+  while not done do
+    idx = buildIndex()
+    local allEmpty = true
+    for _, f in ipairs(furnaces) do
+      -- read input count
+      local ok, inD = pcall(f.per.getItemDetail, 1)
+      local cnt = (ok and inD and inD.count) or 0
+      itemCounts[f.name] = cnt
+      if cnt > 0 then allEmpty = false end
 
--- Fuel management
-local function manageFuel(furnaces,storage)
-  while true do
-    local fuels = loadFuels()
-    local idx = buildIndex(storage)
-    for _,f in ipairs(furnaces) do
-      local fuel=f.per.getItemDetail(2)
-      local fc=(fuel and fuel.count) or 0
-      if fc<MAX_FUEL_THRESHOLD then
-        local inD=f.per.getItemDetail(1)
-        local needed=math.max(1,math.ceil(((inD and inD.count)or 0)/FUEL_PER_COAL)-fc)
-        for _,fuelName in ipairs(fuels) do
-          local entry=idx[fuelName]
-          if entry and entry.total>0 then
-            local rem=needed
-            for _,src in ipairs(entry.sources) do
-              if rem<=0 then break end
-              local cp=peripheral.wrap(src.chest)
-              local mv=cp.pushItems(f.name,src.slot,rem,2)
-              if mv and mv>0 then rem=rem-mv end
+      -- collect output
+      local ok2, outD = pcall(f.per.getItemDetail, 3)
+      if ok2 and outD and outD.count > 0 then
+        f.per.pushItems(OUTPUT_CHEST, 3, outD.count)
+      end
+
+      -- refill fuel if below threshold
+      local ok3, fuelD = pcall(f.per.getItemDetail, 2)
+      local fc = (ok3 and fuelD and fuelD.count) or 0
+      if fc < MAX_FUEL_THRESHOLD then
+        for _, name in ipairs(fuels) do
+          local slots = idx[name]
+          if slots then
+            local need = MAX_FUEL_THRESHOLD - fc
+            for _, s in ipairs(slots) do
+              if need <= 0 then break end
+              local cp = peripheral.wrap(s.chest)
+              local moved = cp.pushItems(f.name, s.slot, need, 2)
+              need = need - (moved or 0)
             end
             break
           end
         end
       end
     end
-    sleep(CHECK_INTERVAL)
+    -- check no fuel left
+    local idxFuel = buildIndex()
+    local anyFuel = false
+    for _, name in ipairs(fuels) do
+      if idxFuel[name] and #idxFuel[name] > 0 then anyFuel = true end
+    end
+    if allEmpty or not anyFuel then
+      done = true
+    end
   end
 end
 
--- Terminal progress bar
-local function displayProgressTerminal(furnaces)
+-- Display thread: update terminal & monitor progress ---------------------
+local function displayThread()
+  -- wait until capacity is set or done
+  while progressCapacity == 0 and not done do sleep(0) end
+
+  -- locate monitor
+  local mon
+  for _, name in ipairs(peripheral.getNames()) do
+    if peripheral.getType(name) == "monitor" then mon = peripheral.wrap(name); break end
+  end
+  if mon then
+    mon.setTextScale(0.5)
+    mon.clear()
+  end
+
   local y = select(2, term.getCursorPos())
-  while true do
+  while not done do
     local total = 0
-    for _, f in ipairs(furnaces) do
-      local inD = f.per.getItemDetail(1)
-      if inD then total = total + inD.count end
-    end
-    local done = progressCapacity - total
-    local pct = math.floor(done / progressCapacity * 100)
+    for _, f in ipairs(furnaces) do total = total + (itemCounts[f.name] or 0) end
+    local doneCount = progressCapacity - total
+    local pct = math.floor(doneCount / progressCapacity * 100)
     local filled = math.floor(pct / 100 * PROGRESS_BAR_WIDTH)
     local bar = string.rep("#", filled) .. string.rep("-", PROGRESS_BAR_WIDTH - filled)
+
+    -- terminal
     term.setCursorPos(1, y)
     term.clearLine()
-    write(string.format("Progress:[%s]%d%% %d/%d", bar, pct, done, progressCapacity))
-    if total == 0 then break end
+    write(string.format("T-Progress:[%s] %d%% %d/%d", bar, pct, doneCount, progressCapacity))
+
+    -- monitor
+    if mon then
+      mon.clear()
+      mon.setCursorPos(1,1)
+      mon.write(string.format("M-Progress:[%s] %d%%", bar, pct))
+    end
+
     sleep(CHECK_INTERVAL)
   end
-  print("\n[SUCCESS] All input slots empty.")
+  -- final success message
+  print("\n[SUCCESS] All smelting complete or out of fuel.")
+  if mon then mon.setCursorPos(1,2); mon.write("[SUCCESS]") end
 end
 
--- Monitor progress bar
-local function displayProgressMonitor(furnaces)
-  local mon = nil
-  for _, name in ipairs(peripheral.getNames()) do
-    if peripheral.getType(name) == "monitor" then
-      mon = peripheral.wrap(name)
-      break
-    end
-  end
-  if not mon then return end
-  mon.setTextScale(0.5)
-  mon.clear()
-  while true do
-    local total = 0
-    for _, f in ipairs(furnaces) do
-      local inD = f.per.getItemDetail(1)
-      if inD then total = total + inD.count end
-    end
-    local done = progressCapacity - total
-    local pct = math.floor(done / progressCapacity * 100)
-    local filled = math.floor(pct / 100 * PROGRESS_BAR_WIDTH)
-    local bar = string.rep("#", filled) .. string.rep("-", PROGRESS_BAR_WIDTH - filled)
-
-    mon.setCursorPos(1,1)
-    mon.clearLine()
-    mon.write(string.format("Progress: [%s] %d%%", bar, pct))
-
-    if total == 0 then break end
-    sleep(CHECK_INTERVAL)
-  end
-  mon.setCursorPos(1,2)
-  mon.write("[SUCCESS] Done")
-end
-
--- Insert smeltables
-local function insertSmeltables(furnaces,storage)
+-- Insertion thread: prompt user and inject items -------------------------
+local function insertionThread()
   ensureFile(SMELTABLE_FILE)
-  local list=readLines(SMELTABLE_FILE)
-  local smeltable={}
-  for _,i in ipairs(list) do smeltable[i]=true end
+  local list = readLines(SMELTABLE_FILE)
+  local smeltable = {}
+  for _, name in ipairs(list) do smeltable[name] = true end
 
   io.write("Item to smelt (or 'skip'): ")
-  local c=trim(read() or "") if c:lower()=="skip" then
+  local input = trim(read() or "")
+  if input:lower() == 'skip' then
     progressCapacity = #furnaces * 64
     return
   end
-  local norm=c:lower():gsub("%s+","_")
-  local full=nil
-  for item in pairs(smeltable) do if item:find(norm,1,true) then full=item end end
-  if not full then return end
 
-  local idx=buildIndex(storage)
-  local entry=idx[full] if not entry then return end
-  local avail=entry.total
-  local cap=#furnaces*64
-  io.write(string.format("Found %d %s | Cap %d\n",avail,full,cap))
+  -- match item
+  local norm = input:lower():gsub("%s+","_")
+  local target
+  for name in pairs(smeltable) do if name:find(norm,1,true) then target = name end end
+  if not target then error("Unknown smeltable: "..input) end
+
+  -- determine available quantity
+  local idx = buildIndex()
+  local entry = idx[target]
+  if not entry then error("No items to smelt: "..target) end
+  local totalAvail = 0
+  for _, slot in ipairs(entry) do
+    local p = peripheral.wrap(slot.chest)
+    local info = p.getItemDetail(slot.slot)
+    totalAvail = totalAvail + (info and info.count or 0)
+  end
+  io.write(string.format("Found %d %s\n", totalAvail, target))
   io.write("Qty to smelt: ")
-  local q=tonumber(trim(read() or ""))
-  if not q or q<1 or q>avail or q>cap then return end
+  local q = tonumber(trim(read() or ""))
+  assert(q and q>0 and q<=totalAvail, "Invalid quantity")
   progressCapacity = q
 
-  local perF=math.floor(q/#furnaces)
-  local rem=q%#furnaces
-  for i,f in ipairs(furnaces) do
-    local tgt=perF+(i<=rem and 1 or 0)
-    local send=tgt
-    for _,s in ipairs(entry.sources) do
-      if send<=0 then break end
-      local cp=peripheral.wrap(s.chest)
-      local ok=cp.pushItems(f.name,s.slot,send,1)
-      if ok and ok>0 then send=send-ok end
+  -- push items into furnaces up to target
+  local perF = math.floor(q / #furnaces)
+  local rem = q % #furnaces
+  local neededMap = {}
+  for i,f in ipairs(furnaces) do neededMap[f.name] = perF + (i <= rem and 1 or 0) end
+  for name, slots in pairs(idx) do
+    if name == target then
+      for _, slot in ipairs(slots) do
+        for _, f in ipairs(furnaces) do
+          local need = neededMap[f.name]
+          if need > 0 then
+            local cp = peripheral.wrap(slot.chest)
+            local moved = cp.pushItems(f.name, slot.slot, need, 1)
+            neededMap[f.name] = need - (moved or 0)
+          end
+        end
+      end
+      break
     end
   end
 end
 
--- Main
+-- Main execution ----------------------------------------------------------
 local function main()
   ensureFile(FURNACES_FILE)
-  ensureFile(SMELTABLE_FILE)
   ensureFile(FUELS_FILE)
-  local furnaces = loadFurnaces()
-  local storage = getStorage(furnaces)
 
-  parallel.waitForAny(
-    function() insertSmeltables(furnaces, storage) end,
-    function() manageFuel(furnaces, storage) end,
-    function() collectOutput(furnaces) end,
-    function() displayProgressTerminal(furnaces) end,
-    function() displayProgressMonitor(furnaces) end
+  loadFurnaces()
+  getStorage()
+  loadFuels()
+
+  -- start all threads; display waits until insertion sets capacity
+  parallel.waitForAll(
+    scannerThread,
+    insertionThread,
+    displayThread
   )
 end
 
