@@ -1,22 +1,18 @@
 -- Smart AutoSmelter for CC:Tweaked
 -- Streamlined: no refuel/output prints, dynamic progress updates
 
--- Configuration files and settings
+-- Configuration
 local FURNACES_FILE       = "furnaces.txt"
 local SMELTABLE_FILE      = "smeltable.txt"
 local FUELS_FILE          = "fuels.txt"
 local OUTPUT_CHEST        = "minecraft:chest_X"
-local FUEL_PER_COAL       = 8            -- smelts per coal
-local MAX_FUEL_THRESHOLD  = 2            -- refill threshold
-local PROGRESS_BAR_WIDTH  = 20           -- characters in progress bar
-local CHECK_INTERVAL      = 1            -- seconds for all loops
+local FUEL_PER_COAL       = 8
+local MAX_FUEL_THRESHOLD  = 2
+local PROGRESS_BAR_WIDTH  = 20
+local CHECK_INTERVAL      = 1
 
--- Utility: trim
-local function trim(s)
-  return (s or ""):match("^%s*(.-)%s*$")
-end
-
--- Read lines
+-- Utility
+local function trim(s) return (s or ""):match("^%s*(.-)%s*$") end
 local function readLines(path)
   if not fs.exists(path) then return {} end
   local file = fs.open(path, "r") if not file then return {} end
@@ -28,13 +24,11 @@ local function readLines(path)
   end
   return lines
 end
-
--- Ensure file
 local function ensureFile(path)
   if not fs.exists(path) then local ok,f=pcall(fs.open,path,"w") if ok and f then f.close() end end
 end
 
--- Load furnaces
+-- Loaders
 local function loadFurnaces()
   ensureFile(FURNACES_FILE)
   while true do
@@ -50,8 +44,6 @@ local function loadFurnaces()
     sleep(CHECK_INTERVAL)
   end
 end
-
--- Load fuels in order
 local function loadFuels()
   ensureFile(FUELS_FILE)
   local lines = readLines(FUELS_FILE)
@@ -59,11 +51,8 @@ local function loadFuels()
   for _, line in ipairs(lines) do table.insert(fuels, line) end
   return fuels
 end
-
--- Discover storage (exclude furnaces)
 local function getStorage(furnaces)
-  local furnaceSet={}
-  for _,f in ipairs(furnaces) do furnaceSet[f.name]=true end
+  local furnaceSet={} for _,f in ipairs(furnaces) do furnaceSet[f.name]=true end
   local list={}
   for _,n in ipairs(peripheral.getNames()) do
     if not furnaceSet[n] then
@@ -73,8 +62,6 @@ local function getStorage(furnaces)
   end
   return list
 end
-
--- Build inventory index
 local function buildIndex(storage)
   local idx={}
   for _,chest in ipairs(storage) do
@@ -96,7 +83,7 @@ local function buildIndex(storage)
   return idx
 end
 
--- Collect output (no prints)
+-- Smelting control
 local function collectOutput(furnaces)
   for _,f in ipairs(furnaces) do
     local out=f.per.getItemDetail(3)
@@ -105,10 +92,7 @@ local function collectOutput(furnaces)
     end
   end
 end
-
--- Monitor furnaces: fuel and output
 local function monitorFurnaces(furnaces,storage)
-  local warned=false
   while true do
     collectOutput(furnaces)
     local fuels = loadFuels()
@@ -119,7 +103,6 @@ local function monitorFurnaces(furnaces,storage)
       if fc<MAX_FUEL_THRESHOLD then
         local inD=f.per.getItemDetail(1)
         local needed=math.max(1,math.ceil(((inD and inD.count)or 0)/FUEL_PER_COAL)-fc)
-        local refueled=false
         for _,fuelName in ipairs(fuels) do
           local entry=idx[fuelName]
           if entry and entry.total>0 then
@@ -130,44 +113,38 @@ local function monitorFurnaces(furnaces,storage)
               local mv=cp.pushItems(f.name,src.slot,rem,2)
               if mv and mv>0 then rem=rem-mv end
             end
-            refueled=true
             break
           end
         end
-        warned=not refueled
       end
     end
     sleep(CHECK_INTERVAL)
   end
 end
 
--- Progress bar updates only on change
+-- Updated Progress Bar
 local function displayProgress(furnaces)
-  local capacity=#furnaces*64
-  local _,y=term.getCursorPos()
-  local prev= -1
+  local capacity = #furnaces * 64
+  local y = select(2, term.getCursorPos())
   while true do
-    local total=0
-    for _,f in ipairs(furnaces) do
-      local inD=f.per.getItemDetail(1)
-      if inD then total=total+inD.count end
+    local total = 0
+    for _, f in ipairs(furnaces) do
+      local inD = f.per.getItemDetail(1)
+      if inD then total = total + inD.count end
     end
-    if total==0 then break end
-    if total~=prev then
-      local pct=math.floor(total/capacity*100)
-      local filled=math.floor(pct/100*PROGRESS_BAR_WIDTH)
-      local bar=string.rep("#",filled)..string.rep("-",PROGRESS_BAR_WIDTH-filled)
-      term.setCursorPos(1,y)
-      term.clearLine()
-      write(string.format("Progress:[%s]%d%% %d/%d",bar,pct,total,capacity))
-      prev=total
-    end
+    local pct = math.floor((1 - total / capacity) * 100)
+    local filled = math.floor(pct / 100 * PROGRESS_BAR_WIDTH)
+    local bar = string.rep("#", filled) .. string.rep("-", PROGRESS_BAR_WIDTH - filled)
+    term.setCursorPos(1, y)
+    term.clearLine()
+    write(string.format("Progress:[%s]%d%% %d/%d", bar, pct, capacity - total, capacity))
+    if total == 0 then break end
     sleep(CHECK_INTERVAL)
   end
   print("\n[SUCCESS] All input slots empty.")
 end
 
--- Main smelting
+-- Updated Smelting Main (no progress prints per furnace)
 local function smeltMain(furnaces,storage)
   ensureFile(SMELTABLE_FILE)
   local list=readLines(SMELTABLE_FILE)
@@ -192,21 +169,14 @@ local function smeltMain(furnaces,storage)
     local rem=q%#furnaces
     for i,f in ipairs(furnaces) do
       local tgt=perF+(i<=rem and 1 or 0)
-      local mv=0
-      if tgt>0 then
-        local inD=f.per.getItemDetail(1)
-        local free=64-((inD and inD.count)or 0)
-        local send=math.min(tgt,free)
-        for _,s in ipairs(entry.sources) do
-          if send<=0 then break end
-          local cp=peripheral.wrap(s.chest)
-          local ok=cp.pushItems(f.name,s.slot,send,1)
-          if ok and ok>0 then mv=mv+ok;send=send-ok end
-        end
+      local send=tgt
+      for _,s in ipairs(entry.sources) do
+        if send<=0 then break end
+        local cp=peripheral.wrap(s.chest)
+        local ok=cp.pushItems(f.name,s.slot,send,1)
+        if ok and ok>0 then send=send-ok end
       end
-      io.write(string.format("F%d:%d/%d ",i,mv,tgt))
     end
-    io.write("\n")
     break
     ::cont::
   end
