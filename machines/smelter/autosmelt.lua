@@ -8,7 +8,7 @@ local OUTPUT_CHEST        = "minecraft:chest_43"
 local MAX_FUEL_THRESHOLD  = 4
 local PROGRESS_BAR_WIDTH  = 20
 local CHECK_INTERVAL      = 0.5
-local TEXT_SCALE = 1.5
+local TEXT_SCALE = 1
 
 -- State variables
 local furnaces = {}
@@ -39,6 +39,20 @@ local function ensureFile(path)
   if not fs.exists(path) then
     local ok, f = pcall(fs.open, path, "w")
     if ok and f then f.close() end
+  end
+end
+
+-- Display system status on monitor ---------------------------------------
+local function displayStatus(message)
+  for _, name in ipairs(peripheral.getNames()) do
+    if peripheral.getType(name) == "monitor" then
+      local mon = peripheral.wrap(name)
+      mon.setTextScale(TEXT_SCALE)
+      mon.clear()
+      mon.setCursorPos(1, 1)
+      mon.write(message)
+      break
+    end
   end
 end
 
@@ -267,14 +281,17 @@ local function insertionThread()
   end
 end
 
+
 -- Main execution ----------------------------------------------------------
 local function main()
+  displayStatus("Initializing systems...")
   ensureFile(FURNACES_FILE)
   ensureFile(FUELS_FILE)
   loadFurnaces()
   getStorage()
   loadFuels()
   parallel.waitForAll(scannerThread, insertionThread, displayThread)
+  displayStatus("System offline...")
 end
 
 main()
