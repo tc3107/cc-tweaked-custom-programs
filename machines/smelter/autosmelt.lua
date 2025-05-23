@@ -8,7 +8,7 @@ local OUTPUT_CHEST        = "minecraft:chest_43"
 local MAX_FUEL_THRESHOLD  = 4
 local PROGRESS_BAR_WIDTH  = 20
 local CHECK_INTERVAL      = 0.5
-local TEXT_SCALE = 1
+local TEXT_SCALE          = 1
 
 -- State variables
 local furnaces = {}
@@ -111,22 +111,19 @@ end
 -- Scanner thread ---------------------------------------------------------
 local function scannerThread()
   print("[INFO] Scanning fuel levels...")
-  local idx
   while true do
-    idx = buildIndex()
-
+    local idx = buildIndex()
     for _, f in ipairs(furnaces) do
       local ok, inD = pcall(f.per.getItemDetail, 1)
-      local cnt = (ok and inD and inD.count) or 0
-      itemCounts[f.name] = cnt
+      itemCounts[f.name] = (ok and inD and inD.count) or 0
 
-      local ok2, outD = pcall(f.per.getItemDetail, 3)
-      if ok2 and outD and outD.count > 0 then
+      local ok_out, outD = pcall(f.per.getItemDetail, 3)
+      if ok_out and outD and outD.count > 0 then
         f.per.pushItems(OUTPUT_CHEST, 3, outD.count)
       end
 
-      local ok3, fuelD = pcall(f.per.getItemDetail, 2)
-      local fc = (ok3 and fuelD and fuelD.count) or 0
+      local ok_fuel, fuelD = pcall(f.per.getItemDetail, 2)
+      local fc = (ok_fuel and fuelD and fuelD.count) or 0
       if fc < MAX_FUEL_THRESHOLD then
         for _, name in ipairs(fuels) do
           local slots = idx[name]
@@ -143,7 +140,6 @@ local function scannerThread()
         end
       end
     end
-
     sleep(CHECK_INTERVAL)
   end
 end
@@ -151,7 +147,6 @@ end
 -- Display thread ---------------------------------------------------------
 local function displayThread()
   while progressCapacity == 0 do sleep(0) end
-
   local mon
   for _, name in ipairs(peripheral.getNames()) do
     if peripheral.getType(name) == "monitor" then mon = peripheral.wrap(name); break end
@@ -161,7 +156,7 @@ local function displayThread()
     mon.clear()
   end
 
-  local y = select(2, term.getCursorPos())
+  local _, startY = term.getCursorPos()
   while true do
     local total = 0
     for _, f in ipairs(furnaces) do total = total + (itemCounts[f.name] or 0) end
@@ -170,7 +165,7 @@ local function displayThread()
     local filled = math.floor(pct / 100 * PROGRESS_BAR_WIDTH)
     local bar = string.rep("#", filled) .. string.rep("-", PROGRESS_BAR_WIDTH - filled)
 
-    term.setCursorPos(1, y)
+    term.setCursorPos(1, startY)
     term.clearLine()
     write(string.format("T-Progress:[%s] %d%% %d/%d", bar, pct, doneCount, progressCapacity))
 
@@ -179,7 +174,6 @@ local function displayThread()
       mon.setCursorPos(1, 1)
       mon.write(string.format("M-Progress:[%s] %d%%", bar, pct))
     end
-
     sleep(CHECK_INTERVAL)
   end
 end
@@ -195,7 +189,7 @@ local function insertionThread()
   local totalInFurnaces = 0
   for _, f in ipairs(furnaces) do
     local ok, inD = pcall(f.per.getItemDetail, 1)
-    totalInFurnaces = totalInFurnaces + ((ok and inD and inD.count) or 0)
+w    totalInFurnaces = totalInFurnaces + ((ok and inD and inD.count) or 0)
   end
 
   io.write("Item to smelt (or 'skip'): ")
@@ -208,7 +202,6 @@ local function insertionThread()
   -- normalize user's input
   local raw = input:lower():gsub("%s+", "_")
   local norm = raw
-  -- if user didn't include namespace, try prepending
   if not raw:find(":", 1, true) then
     norm = "minecraft:" .. raw
   end
@@ -231,56 +224,6 @@ local function insertionThread()
     print("[ERROR] Unknown smeltable: " .. input)
     return
   end
-
-  -- build storage index and check availability
-  local idx = buildIndex()
-  local entry = idx[target]
-  if not entry or #entry == 0 then
-    print("[ERROR] No items to smelt: " .. target)
-    return
-  end
-
-  local totalAvail = 0
-  for _, slot in ipairs(entry) do
-    local p = peripheral.wrap(slot.chest)
-    local info = p.getItemDetail(slot.slot)
-    if info and info.count and info.count > 0 then
-      totalAvail = totalAvail + info.count
-    end
-  end
-
-  if totalAvail == 0 then
-    print("[ERROR] No items to smelt: " .. target)
-    return
-  end
-
-  io.write(string.format("Found %d %s\n", totalAvail, target))
-  io.write("Qty to smelt: ")
-  local q = tonumber(trim(read() or ""))
-  if not q or q <= 0 or q > totalAvail then
-    print("[ERROR] Invalid quantity")
-    return
-  end
-
-  progressCapacity = q + totalInFurnaces
-
-  local perF = math.floor(q / #furnaces)
-  local rem = q % #furnaces
-  local neededMap = {}
-  for i, f in ipairs(furnaces) do neededMap[f.name] = perF + (i <= rem and 1 or 0) end
-
-  -- distribute items to furnaces
-  for _, slot in ipairs(entry) do
-    for _, f in ipairs(furnaces) do
-      local need = neededMap[f.name]
-      if need > 0 then
-        local cp = peripheral.wrap(slot.chest)
-        local moved = cp.pushItems(f.name, slot.slot, need, 1)
-        neededMap[f.name] = need - (moved or 0)
-      end
-    end
-  end
-end
 
   -- build storage index and check availability
   local idx = buildIndex()
