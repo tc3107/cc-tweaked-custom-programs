@@ -191,6 +191,7 @@ local function insertionThread()
   local smeltable = {}
   for _, name in ipairs(list) do smeltable[name] = true end
 
+  -- compute items already in furnaces
   local totalInFurnaces = 0
   for _, f in ipairs(furnaces) do
     local ok, inD = pcall(f.per.getItemDetail, 1)
@@ -204,16 +205,29 @@ local function insertionThread()
     return
   end
 
+  -- normalize user's input
   local norm = input:lower():gsub("%s+", "_")
   local target
-  for name in pairs(smeltable) do
-    if name:find(norm, 1, true) then target = name end
+
+  -- 1) exact-match lookup
+  if smeltable[norm] then
+    target = norm
+  else
+    -- 2) fallback to first substring match
+    for name in pairs(smeltable) do
+      if name:find(norm, 1, true) then
+        target = name
+        break
+      end
+    end
   end
+
   if not target then
     print("[ERROR] Unknown smeltable: " .. input)
     return
   end
 
+  -- build storage index and check availability
   local idx = buildIndex()
   local entry = idx[target]
   if not entry or #entry == 0 then
@@ -249,19 +263,16 @@ local function insertionThread()
   local rem = q % #furnaces
   local neededMap = {}
   for i, f in ipairs(furnaces) do neededMap[f.name] = perF + (i <= rem and 1 or 0) end
-  for name, slots in pairs(idx) do
-    if name == target then
-      for _, slot in ipairs(slots) do
-        for _, f in ipairs(furnaces) do
-          local need = neededMap[f.name]
-          if need > 0 then
-            local cp = peripheral.wrap(slot.chest)
-            local moved = cp.pushItems(f.name, slot.slot, need, 1)
-            neededMap[f.name] = need - (moved or 0)
-          end
-        end
+
+  -- distribute items to furnaces
+  for _, slot in ipairs(entry) do
+    for _, f in ipairs(furnaces) do
+      local need = neededMap[f.name]
+      if need > 0 then
+        local cp = peripheral.wrap(slot.chest)
+        local moved = cp.pushItems(f.name, slot.slot, need, 1)
+        neededMap[f.name] = need - (moved or 0)
       end
-      break
     end
   end
 end
