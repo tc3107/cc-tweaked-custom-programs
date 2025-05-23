@@ -206,16 +206,21 @@ local function insertionThread()
   end
 
   -- normalize user's input
-  local norm = input:lower():gsub("%s+", "_")
-  local target
+  local raw = input:lower():gsub("%s+", "_")
+  local norm = raw
+  -- if user didn't include namespace, try prepending
+  if not raw:find(":", 1, true) then
+    norm = "minecraft:" .. raw
+  end
 
+  local target
   -- 1) exact-match lookup
   if smeltable[norm] then
     target = norm
   else
     -- 2) fallback to first substring match
     for name in pairs(smeltable) do
-      if name:find(norm, 1, true) then
+      if name:find(raw, 1, true) then
         target = name
         break
       end
@@ -226,6 +231,56 @@ local function insertionThread()
     print("[ERROR] Unknown smeltable: " .. input)
     return
   end
+
+  -- build storage index and check availability
+  local idx = buildIndex()
+  local entry = idx[target]
+  if not entry or #entry == 0 then
+    print("[ERROR] No items to smelt: " .. target)
+    return
+  end
+
+  local totalAvail = 0
+  for _, slot in ipairs(entry) do
+    local p = peripheral.wrap(slot.chest)
+    local info = p.getItemDetail(slot.slot)
+    if info and info.count and info.count > 0 then
+      totalAvail = totalAvail + info.count
+    end
+  end
+
+  if totalAvail == 0 then
+    print("[ERROR] No items to smelt: " .. target)
+    return
+  end
+
+  io.write(string.format("Found %d %s\n", totalAvail, target))
+  io.write("Qty to smelt: ")
+  local q = tonumber(trim(read() or ""))
+  if not q or q <= 0 or q > totalAvail then
+    print("[ERROR] Invalid quantity")
+    return
+  end
+
+  progressCapacity = q + totalInFurnaces
+
+  local perF = math.floor(q / #furnaces)
+  local rem = q % #furnaces
+  local neededMap = {}
+  for i, f in ipairs(furnaces) do neededMap[f.name] = perF + (i <= rem and 1 or 0) end
+
+  -- distribute items to furnaces
+  for _, slot in ipairs(entry) do
+    for _, f in ipairs(furnaces) do
+      local need = neededMap[f.name]
+      if need > 0 then
+        local cp = peripheral.wrap(slot.chest)
+        local moved = cp.pushItems(f.name, slot.slot, need, 1)
+        neededMap[f.name] = need - (moved or 0)
+      end
+    end
+  end
+end
 
   -- build storage index and check availability
   local idx = buildIndex()
