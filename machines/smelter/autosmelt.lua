@@ -189,7 +189,7 @@ local function insertionThread()
   local totalInFurnaces = 0
   for _, f in ipairs(furnaces) do
     local ok, inD = pcall(f.per.getItemDetail, 1)
-w    totalInFurnaces = totalInFurnaces + ((ok and inD and inD.count) or 0)
+    totalInFurnaces = totalInFurnaces + ((ok and inD and inD.count) or 0)
   end
 
   io.write("Item to smelt (or 'skip'): ")
