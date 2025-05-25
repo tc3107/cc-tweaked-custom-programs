@@ -18,9 +18,13 @@ end
 local function findChests()
   local chests = {}
   for _, name in ipairs(peripheral.getNames()) do
-    local ok, per = pcall(peripheral.wrap, name)
-    if ok and type(per.list)=="function" then
-      table.insert(chests, name)
+    local ptype = peripheral.getType(name) or ""
+    if ptype:find("chest") or ptype:find("barrel") then
+      local ok, per = pcall(peripheral.wrap, name)
+      if ok and type(per.list)=="function" then
+        table.insert(chests, name)
+        print(string.format("[DEBUG] Found storage '%s' (%s)", name, ptype))
+      end
     end
   end
   return chests
@@ -69,6 +73,7 @@ local function initRednet()
   for _, name in ipairs(peripheral.getNames()) do
     if peripheral.getType(name):match("modem") then
       rednet.open(name)
+      print("[DEBUG] rednet opened on " .. name)
       return true
     end
   end
@@ -84,6 +89,7 @@ end
 local function discoverIndexers(reqId)
   local ids = {}
   rednet.broadcast({{ action = DISCOVERY_ACTION, requestId = reqId }}, NETWORK_PROTOCOL)
+
   local timer = os.startTimer(3)
   while true do
     local event, p1, p2, p3 = os.pullEvent()
@@ -92,6 +98,7 @@ local function discoverIndexers(reqId)
       local data = type(msg) == "table" and msg[1]
       if proto == NETWORK_PROTOCOL and type(data) == "table" and data.action == DISCOVERY_REPLY and data.requestId == reqId then
         ids[#ids + 1] = from
+
       end
     elseif event == "timer" and p1 == timer then
       break
@@ -133,6 +140,7 @@ while true do
         chests    = chunks[i]
       }
       rednet.send(idxId, {payload}, NETWORK_PROTOCOL)
+      print(string.format("[DEBUG] Sent %d chest(s) to indexer %d", #chunks[i], idxId))
     end
 
     -- collect partial results
@@ -154,8 +162,9 @@ while true do
 
           partials[from] = data.data
           waiting[from] = nil
-          print(("Received from %d, %d remaining"):format(from, countKeys(waiting)))
-        end
+          print(("[DEBUG] Received result from %d, %d remaining")
+            :format(from, countKeys(waiting)))
+      end
       elseif event=="timer" and p1==timer then
         print("Timeout waiting for indexers.")
         break

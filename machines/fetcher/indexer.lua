@@ -6,6 +6,7 @@ local NETWORK_PROTOCOL = "inventoryNet"
 local DISCOVERY_ACTION = "discover_indexers"
 local DISCOVERY_REPLY  = "discover_response"
 
+
 -- Initialize rednet by opening an attached modem
 local function initRednet()
   for _, side in ipairs(peripheral.getNames()) do
@@ -75,6 +76,7 @@ while true do
 
     -- Build index for assigned inventories
     local result = buildIndex(data.chests)
+
     local reply = {
       action    = "index_result",
       requestId = data.requestId,
@@ -82,6 +84,7 @@ while true do
     }
     rednet.send(sender, {reply}, NETWORK_PROTOCOL)
     print(string.format("[INFO] index_result sent for req %d", data.requestId))
+
   else
     print("[WARN] Received unknown message type from " .. tostring(sender))
   end

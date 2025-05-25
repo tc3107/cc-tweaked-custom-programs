@@ -11,6 +11,7 @@ local INDEX_TIMEOUT    = 65 -- seconds to wait for index response
 -- Trim whitespace
 local function trim(s) return (s or ""):match("^%s*(.-)%s*$") end
 
+
 -- Find and open any attached modem
 local function initRednet()
   for _, side in ipairs(peripheral.getNames()) do
@@ -65,10 +66,12 @@ local function fetchItems(itemSources, qty, outName)
     end
     local take = math.min(src.count, remaining)
     local per = peripheral.wrap(src.chest)
+    print(string.format("[DEBUG] Moving %d from %s slot %d", take, src.chest, src.slot))
     local ok = per.pushItems(outName, src.slot, take)
     if ok and ok > 0 then
       remaining = remaining - ok
       moved = moved + ok
+
     end
   end
   return moved
@@ -111,15 +114,7 @@ local function runPrompt(index)
       end
     end
   end
-end
 
--- MAIN
-if not initRednet() then
-  error("No modem found for rednet")
-end
-
-rednet.send(CENTRAL_ID, {{ action = "index_request" }}, NETWORK_PROTOCOL)
-print("[INFO] Requested global index from server...")
 local sender, msg = rednet.receive(NETWORK_PROTOCOL, INDEX_TIMEOUT)
 if sender ~= CENTRAL_ID then
   print("[ERROR] Unexpected sender or timeout")
@@ -131,6 +126,5 @@ if not payload or payload.action ~= "index_response" then
   return
 end
 
-print("[INFO] Index received with " .. tostring(#payload.data) .. " item types")
 runPrompt(payload.data)
 
