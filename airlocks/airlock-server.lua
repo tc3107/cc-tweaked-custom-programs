@@ -23,8 +23,8 @@ print("Airlock file state: ", get_state())
 
 while true do
     local id, data, proto = rednet.receive()
-    local msg = data[1]
-    if proto == 'auth' then
+    local msg = type(data) == 'table' and data[1]
+    if proto == 'auth' and type(msg) == 'string' then
         print("Request received from", id, "for:", msg)
 
         if get_state() then
@@ -34,6 +34,8 @@ while true do
             rednet.send(id, {false}, 'auth')
             print("Access denied.")
         end
+    else
+        print("Malformed packet from", id)
     end
     print()
 end

@@ -67,7 +67,7 @@ end
 print("[INFO] indexer.lua is running and waiting for index requests...")
 while true do
   local sender, msg, proto = rednet.receive(NETWORK_PROTOCOL)
-  if sender and msg and msg[1] then
+  if sender and type(msg)=="table" and type(msg[1])=="table" then
     local data = msg[1]
     if data.action == "index" and data.requestId and data.chests then
       print(string.format("[INFO] Received index request %d with %d chest(s)", data.requestId, #data.chests))
@@ -87,5 +87,7 @@ while true do
     else
       print("[WARN] Received unknown or malformed message: ", textutils.serialise(msg))
     end
+  else
+    print("[WARN] Ignored malformed packet from " .. tostring(sender))
   end
 end

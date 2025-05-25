@@ -5,6 +5,13 @@ local INDEXERS_FILE = "indexers.txt"
 local NETWORK_PROTOCOL = "inventoryNet"
 local TIMEOUT_SEC = 30
 
+-- Count number of keys in a table
+local function countKeys(t)
+  local n = 0
+  for _ in pairs(t) do n = n + 1 end
+  return n
+end
+
 -- Utility: read lines from a file into a table of numbers
 local function readIndexers(fname)
   local ids = {}
@@ -105,7 +112,8 @@ local requestCounter = 0
 
 while true do
   local sender, msg = rednet.receive(NETWORK_PROTOCOL)
-  if sender and msg and msg[1] and msg[1].action=="index_request" then
+  local data = type(msg)=="table" and msg[1]
+  if sender and type(msg)=="table" and type(data)=="table" and data.action=="index_request" then
     requestCounter = requestCounter + 1
     local reqId = requestCounter
     print(("Index request #%d from %d"):format(reqId, sender))
@@ -131,19 +139,19 @@ while true do
     local timer = os.startTimer(TIMEOUT_SEC)
 
     while next(waiting) do
-      local event, p1, p2 = os.pullEvent()
+      local event, p1, p2, p3 = os.pullEvent()
       if event=="rednet_message" then
-        local from, recv, proto = p1, p2, select(3, ...)
-        local data = recv[1]
+        local from, recv, proto = p1, p2, p3
+        local data = type(recv)=="table" and recv[1]
         if proto==NETWORK_PROTOCOL
-           and data
+           and type(data)=="table"
            and data.action=="index_result"
            and data.requestId==reqId
            and waiting[from] then
 
           partials[from] = data.data
           waiting[from] = nil
-          print(("Received from %d, %d remaining"):format(from, table.getn(waiting)))
+          print(("Received from %d, %d remaining"):format(from, countKeys(waiting)))
         end
       elseif event=="timer" and p1==timer then
         print("Timeout waiting for indexers.")
@@ -158,7 +166,7 @@ while true do
       requestId = reqId,
       data      = merged
     }}, NETWORK_PROTOCOL)
-    print(("Replied to %d with merged index (%d items)"):format(sender, table.getn(merged)))
+    print(("Replied to %d with merged index (%d items)"):format(sender, countKeys(merged)))
   end
 end
 

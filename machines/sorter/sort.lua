@@ -30,11 +30,13 @@ print("Waiting for server updates...")
 -- Receive and display every update until the server signals completion
 while true do
     local senderId, data, proto = rednet.receive(protocol)
-    local message = data[1]
-    if senderId == serverId then
+    local message = type(data)=='table' and data[1]
+    if senderId == serverId and message ~= nil then
         print("Server: " .. message)
         if message == "Sorting complete" then
             break
         end
+    else
+        print("Received malformed message from " .. senderId)
     end
 end
