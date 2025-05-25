@@ -1,64 +1,50 @@
--- fetch.lua: Retrieve specified items from networked storage
--- Configuration: set your desired output chest (network peripheral name)
-local outputChest = "minecraft:chest_X"
-local listLineDelay = 0.75
+-- fetch.lua
+-- Networked Fetcher Client: requests a global index from the coordinator,
+-- then allows the user to retrieve items from networked storage.
 
--- Utility: trim whitespace
-local function trim(s)
-  return (s or ""):match("^%s*(.-)%s*$")
-end
+local CENTRAL_ID       = 19
+local OUTPUT_CHEST     = "minecraft:chest_X"
+local NETWORK_PROTOCOL = "inventoryNet"
+local LIST_DELAY       = 0.75
+local INDEX_TIMEOUT    = 65 -- seconds to wait for index response
 
--- Discover all storage peripherals with names minecraft:chest_<num> or minecraft:barrel<num>
-local function getStoragePeripherals()
-  local storage = {}
-  for _, name in ipairs(peripheral.getNames()) do
-    if name:match("^minecraft:chest_%d+$") or name:match("^minecraft:barrel%d+$") then
-      local ok, per = pcall(peripheral.wrap, name)
-      if ok and type(per.list) == "function" then
-        table.insert(storage, name)
-      end
+-- Trim whitespace
+local function trim(s) return (s or ""):match("^%s*(.-)%s*$") end
+
+-- Find and open any attached modem
+local function initRednet()
+  for _, side in ipairs(peripheral.getNames()) do
+    local t = peripheral.getType(side)
+    if t == "modem" or t == "wireless_modem" then
+      rednet.open(side)
+      print("[DEBUG] rednet opened on", side)
+      return true
     end
   end
-  return storage
+  return false
 end
 
--- Build inventory index quickly using per.list()
--- { [itemName] = { total=N, sources={ {chest,slot,count}, ... } } }
-local function buildInventoryIndex(storagePeripherals)
-  local index = {}
-  local prefixSet = {}
-  for _, chest in ipairs(storagePeripherals) do
-    local per = peripheral.wrap(chest)
-    for slot, item in pairs(per.list()) do
-      local name  = item.name
-      local count = item.count
-      -- initialize if needed
-      if not index[name] then
-        index[name] = { total = 0, sources = {} }
-      end
-      -- accumulate total and record source
-      index[name].total = index[name].total + count
-      table.insert(index[name].sources, { chest = chest, slot = slot, count = count })
-      -- collect prefix for modded lookup
-      local prefix = name:match("^(.-):")
-      if prefix then prefixSet[prefix] = true end
-    end
-  end
-  -- convert prefix set into list
-  local prefixes = {}
-  for p in pairs(prefixSet) do table.insert(prefixes, p) end
-  return index, prefixes
-end
-
--- Prompt user and read line
+-- Prompt helper
 local function prompt(msg)
   write(msg .. " ")
   return read()
 end
 
--- Get free slots in a chest peripheral
-local function getFreeSpace(chestName)
-  local per = peripheral.wrap(chestName)
+-- Compute list of item prefixes for fuzzy lookup
+local function computePrefixes(index)
+  local set = {}
+  for name in pairs(index) do
+    local p = name:match("^(.-):")
+    if p then set[p] = true end
+  end
+  local list = {}
+  for p in pairs(set) do table.insert(list, p) end
+  return list
+end
+
+-- Get free slot count in a chest
+local function getFreeSpace(name)
+  local per = peripheral.wrap(name)
   local total = per.size()
   local used = 0
   for _, item in pairs(per.list()) do
@@ -67,95 +53,84 @@ local function getFreeSpace(chestName)
   return total - used
 end
 
--- Main fetch logic
-local function main()
-  -- 1. Discover storage
-  local storage = getStoragePeripherals()
-  if #storage == 0 then
-    print("Error: No matching storage peripherals found.")
-    return
-  end
-
-  -- 2. Determine output chest
-  if not peripheral.isPresent(outputChest) then
-    print("Error: outputChest '" .. outputChest .. "' not found on network.")
-    return
-  end
-  local outName = outputChest
-
-  -- 3. Index items quickly
-  print("Indexing items...")
-  local index, prefixes = buildInventoryIndex(storage)
-
-  -- 4. Prompt for action
-  local choice = trim(string.lower(prompt("Enter item name or 'list':")))
-  if choice == "list" then
-    local items = {}
-    for name, data in pairs(index) do
-      table.insert(items, { name = name, total = data.total })
-    end
-    table.sort(items, function(a,b) return a.total > b.total end)
-    for _, v in ipairs(items) do
-      -- strip prefix and format name
-      local rawName = v.name:match(":(.+)") or v.name
-      local displayName = rawName:gsub("_", " ")
-      -- print with bullet
-      print("* " .. displayName .. " - " .. v.total)
-      sleep(listLineDelay)
-    end
-    return
-  end
-
-  -- 5. Normalize input and find match
-  local normalized = choice:gsub("%s+", "_")
-  local itemName
-  for _, prefix in ipairs(prefixes) do
-    local candidate = prefix .. ":" .. normalized
-    if index[candidate] then
-      itemName = candidate
-      break
-    end
-  end
-  if not itemName then
-    print("Item not found: " .. choice)
-    return
-  end
-
-  local available = index[itemName].total
-  print("Available: " .. available)
-
-  -- 6. Quantity
-  local qtyStr = prompt("How many would you like to fetch?")
-  local want = tonumber(qtyStr)
-  if not want or want < 1 or want > available then
-    print("Invalid quantity.")
-    return
-  end
-
-  -- 7. Transfer with chest-full check
-  local toFetch = want
+-- Transfer items from sources to output chest
+local function fetchItems(itemSources, qty, outName)
+  local remaining = qty
   local moved = 0
-  for _, src in ipairs(index[itemName].sources) do
-    if toFetch <= 0 then break end
-    -- Check output chest space
-    local free = getFreeSpace(outName)
-    if free <= 0 then
-      print("Output chest is full. Stopping transfer.")
+  for _, src in ipairs(itemSources) do
+    if remaining <= 0 then break end
+    if getFreeSpace(outName) <= 0 then
+      print("[WARN] Output chest full, stopping early")
       break
     end
-    -- calculate take amount without exceeding needed count
-    local take = math.min(src.count, toFetch)
+    local take = math.min(src.count, remaining)
     local per = peripheral.wrap(src.chest)
     local ok = per.pushItems(outName, src.slot, take)
     if ok and ok > 0 then
+      remaining = remaining - ok
       moved = moved + ok
-      toFetch = toFetch - ok
     end
   end
-
-  -- 8. Report
-  print("Fetched " .. moved .. " of " .. want .. " requested.")
+  return moved
 end
 
--- Run program
-main()
+-- Interactive fetch using provided index
+local function runPrompt(index)
+  local prefixes = computePrefixes(index)
+  while true do
+    local choice = trim(string.lower(prompt("Enter item name or 'list':")))
+    if choice == "" then return end
+    if choice == "list" then
+      local items = {}
+      for n, d in pairs(index) do table.insert(items, {name=n,total=d.total}) end
+      table.sort(items, function(a,b) return a.total > b.total end)
+      for _, v in ipairs(items) do
+        local raw = v.name:match(":(.+)") or v.name
+        print("* " .. raw:gsub("_"," ") .. " - " .. v.total)
+        sleep(LIST_DELAY)
+      end
+    else
+      local normalized = choice:gsub("%s+","_")
+      local itemName
+      for _, p in ipairs(prefixes) do
+        local cand = p .. ":" .. normalized
+        if index[cand] then itemName = cand break end
+      end
+      if not itemName then
+        print("Item not found: " .. choice)
+      else
+        local available = index[itemName].total
+        print("Available: " .. available)
+        local qty = tonumber(prompt("How many to fetch?"))
+        if not qty or qty < 1 or qty > available then
+          print("Invalid quantity.")
+        else
+          local moved = fetchItems(index[itemName].sources, qty, OUTPUT_CHEST)
+          print("Fetched " .. moved .. " of " .. qty)
+        end
+      end
+    end
+  end
+end
+
+-- MAIN
+if not initRednet() then
+  error("No modem found for rednet")
+end
+
+rednet.send(CENTRAL_ID, {{ action = "index_request" }}, NETWORK_PROTOCOL)
+print("[INFO] Requested global index from server...")
+local sender, msg = rednet.receive(NETWORK_PROTOCOL, INDEX_TIMEOUT)
+if sender ~= CENTRAL_ID then
+  print("[ERROR] Unexpected sender or timeout")
+  return
+end
+local payload = type(msg)=="table" and msg[1]
+if not payload or payload.action ~= "index_response" then
+  print("[ERROR] Invalid response")
+  return
+end
+
+print("[INFO] Index received with " .. tostring(#payload.data) .. " item types")
+runPrompt(payload.data)
+
