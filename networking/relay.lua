@@ -22,7 +22,11 @@ print("Relay active between sides '" .. modemA .. "' and '" .. modemB .. "'")
 -- Relay logic
 local function relay(fromSide, toSide)
     while true do
-        local senderId, message, protocol = rednet.receive(nil, nil, fromSide)
+        -- rednet.receive does not support filtering by modem side, so we just
+        -- wait for any message and forward it unchanged. The original code
+        -- attempted to pass the side as a third parameter which results in a
+        -- runtime error as rednet.receive expects a numeric timeout.
+        local senderId, message, protocol = rednet.receive()
 
         if type(message) == "table" then
             local isTagged = false
@@ -39,7 +43,11 @@ local function relay(fromSide, toSide)
                 local newMessage = { table.unpack(message) }
                 table.insert(newMessage, "source:relay")
 
-                rednet.send(senderId, newMessage, protocol, toSide)
+                -- rednet.send does not accept a modem side parameter either, so
+                -- the message is broadcast on all open modems. This is
+                -- sufficient for a simple relay as we tag forwarded packets to
+                -- avoid loops.
+                rednet.send(senderId, newMessage, protocol)
                 print("Forwarded from " .. fromSide .. " → " .. toSide .. " (protocol: " .. tostring(protocol) .. ")")
             else
                 print("Rejected looped message from " .. fromSide)
