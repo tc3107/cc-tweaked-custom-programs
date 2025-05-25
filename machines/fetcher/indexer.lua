@@ -1,7 +1,16 @@
 -- indexer.lua
--- Indexing Server: waits for chest assignment, indexes them with extensive debugging, and returns the result.
+-- Inventory Indexer: responds to discovery broadcasts and indexes assigned
+-- inventories. Provides extensive debug output for reliability.
 
 local NETWORK_PROTOCOL = "inventoryNet"
+local DISCOVERY_ACTION = "discover_indexers"
+local DISCOVERY_REPLY  = "discover_response"
+
+local function countKeys(t)
+  local n = 0
+  for _ in pairs(t) do n = n + 1 end
+  return n
+end
 
 -- Initialize rednet by opening an attached modem
 local function initRednet()
@@ -26,37 +35,28 @@ end
 
 -- Build index for the given list of chest names (with debug)
 local function buildIndex(chests)
-  local index = {}
+  local result = {}
   print(string.format("[DEBUG] Starting buildIndex with %d chest(s)", #chests))
   for i, chest in ipairs(chests) do
     print(string.format("[DEBUG] [%d/%d] Processing chest '%s'", i, #chests, chest))
-    -- Attempt to wrap the peripheral
     local ok, per = pcall(peripheral.wrap, chest)
     if not ok or not per then
       print(string.format("[ERROR] Could not wrap peripheral '%s': %s", chest, tostring(per)))
     else
-      -- List items in this chest
-      local items = per.list()
-      print(string.format("[DEBUG] Chest '%s' contains %d slot(s)", chest, #items))
-      for slot, item in pairs(items) do
-        -- item has fields: name, count
+      local slots = {}
+      local count = 0
+      for slot, item in pairs(per.list()) do
         if item and item.name then
+          slots[slot] = { name = item.name, count = item.count }
+          count = count + 1
           print(string.format("  [ITEM] slot=%d name=%s count=%d", slot, item.name, item.count))
-          -- Initialize index entry if needed
-          if not index[item.name] then
-            index[item.name] = { total = 0, sources = {} }
-          end
-          -- Accumulate
-          index[item.name].total = index[item.name].total + item.count
-          table.insert(index[item.name].sources, { chest = chest, slot = slot, count = item.count })
-        else
-          print(string.format("  [WARN] slot=%d in chest='%s' has no item data", slot, chest))
         end
       end
+      result[chest] = slots
+      print(string.format("[DEBUG] Chest '%s' indexed (%d slot entries)", chest, count))
     end
   end
-  print(string.format("[DEBUG] buildIndex complete: found %d unique item type(s)", #index))
-  return index
+  return result
 end
 
 -- Main loop: receive assignments and respond
@@ -64,30 +64,34 @@ if not initRednet() then
   error("[FATAL] No modem found for rednet.")
 end
 
-print("[INFO] indexer.lua is running and waiting for index requests...")
+print("[INFO] indexer.lua running, waiting for commands...")
 while true do
   local sender, msg, proto = rednet.receive(NETWORK_PROTOCOL)
-  if sender and type(msg)=="table" and type(msg[1])=="table" then
-    local data = msg[1]
-    if data.action == "index" and data.requestId and data.chests then
-      print(string.format("[INFO] Received index request %d with %d chest(s)", data.requestId, #data.chests))
-      print("[DEBUG] Assigned chest list:", textutils.serialise(data.chests))
-      logVisiblePeripherals()
-
-      -- Build and send index
-      local result = buildIndex(data.chests)
-      print(string.format("[INFO] Sending index_result for req %d: %d item type(s)", data.requestId, #result))
-      local reply = {
-        action = "index_result",
-        requestId = data.requestId,
-        data = result
-      }
-      rednet.send(sender, {reply}, NETWORK_PROTOCOL)
-      print(string.format("[INFO] index_result sent for req %d", data.requestId))
-    else
-      print("[WARN] Received unknown or malformed message: ", textutils.serialise(msg))
-    end
-  else
+  local data = type(msg) == "table" and msg[1]
+  if proto ~= NETWORK_PROTOCOL or type(data) ~= "table" then
     print("[WARN] Ignored malformed packet from " .. tostring(sender))
+  elseif data.action == DISCOVERY_ACTION and data.requestId then
+    -- Respond to discovery broadcast
+    rednet.send(sender, {{ action = DISCOVERY_REPLY, requestId = data.requestId }}, NETWORK_PROTOCOL)
+    print(string.format("[DEBUG] Responded to discovery request %d from %d", data.requestId, sender))
+  elseif data.action == "index" and data.requestId and type(data.chests) == "table" then
+    print(string.format("[INFO] Received index request %d with %d inventory blocks", data.requestId, #data.chests))
+    print("[DEBUG] Assigned inventory list:", textutils.serialise(data.chests))
+    logVisiblePeripherals()
+
+    -- Build index for assigned inventories
+    local result = buildIndex(data.chests)
+    print(string.format("[DEBUG] Indexed %d chest(s)", #data.chests))
+    local reply = {
+      action    = "index_result",
+      requestId = data.requestId,
+      data      = result
+    }
+    rednet.send(sender, {reply}, NETWORK_PROTOCOL)
+    print(string.format("[INFO] index_result sent for req %d", data.requestId))
+    print(string.format("[DEBUG] Sent %d chest entries", countKeys(result)))
+  else
+    print("[WARN] Received unknown message type from " .. tostring(sender))
   end
 end
+

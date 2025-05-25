@@ -1,9 +1,11 @@
 -- coordinator.lua
--- Central Server: reads indexer IDs, partitions workloads, aggregates results, and returns the merged index.
+-- Central Server: discovers indexers dynamically, partitions inventories between
+-- them, aggregates their results and replies to clients with a global index.
 
-local INDEXERS_FILE = "indexers.txt"
-local NETWORK_PROTOCOL = "inventoryNet"
-local TIMEOUT_SEC = 30
+local NETWORK_PROTOCOL   = "inventoryNet"
+local DISCOVERY_ACTION   = "discover_indexers"
+local DISCOVERY_REPLY    = "discover_response"
+local TIMEOUT_SEC        = 60
 
 -- Count number of keys in a table
 local function countKeys(t)
@@ -12,30 +14,17 @@ local function countKeys(t)
   return n
 end
 
--- Utility: read lines from a file into a table of numbers
-local function readIndexers(fname)
-  local ids = {}
-  local f = fs.open(fname, "r")
-  if not f then
-    error("Cannot open "..fname)
-  end
-  while true do
-    local line = f.readLine()
-    if not line then break end
-    local n = tonumber(line:match("^%s*(%d+)%s*$"))
-    if n then table.insert(ids, n) end
-  end
-  f.close()
-  return ids
-end
-
 -- Discover all chests on the network
 local function findChests()
   local chests = {}
   for _, name in ipairs(peripheral.getNames()) do
-    local ok, per = pcall(peripheral.wrap, name)
-    if ok and type(per.list)=="function" then
-      table.insert(chests, name)
+    local ptype = peripheral.getType(name) or ""
+    if ptype:find("chest") or ptype:find("barrel") then
+      local ok, per = pcall(peripheral.wrap, name)
+      if ok and type(per.list)=="function" then
+        table.insert(chests, name)
+        print(string.format("[DEBUG] Found storage '%s' (%s)", name, ptype))
+      end
     end
   end
   return chests
@@ -55,45 +44,36 @@ local function partition(list, N)
   return chunks
 end
 
--- Merge multiple index tables into one
-local function mergeIndices(partials)
+-- Convert indexer results (per-chest) into a global item index
+local function buildGlobalIndex(results)
   local merged = {}
-  for _, idx in pairs(partials) do
-    for name, data in pairs(idx) do
-      if not merged[name] then
-        merged[name] = { total=0, sources={} }
-      end
-      merged[name].total = merged[name].total + data.total
-      for _, src in ipairs(data.sources) do
-        table.insert(merged[name].sources, src)
+  for _, chestData in pairs(results) do
+    for chest, slots in pairs(chestData) do
+      for slot, item in pairs(slots) do
+        if item and item.name then
+          if not merged[item.name] then
+            merged[item.name] = { total = 0, sources = {} }
+          end
+          merged[item.name].total = merged[item.name].total + item.count
+          table.insert(merged[item.name].sources, {
+            chest = chest,
+            slot  = slot,
+            count = item.count
+          })
+        end
       end
     end
   end
   return merged
 end
 
--- Build an inventory index for given chest list
-local function buildIndexFor(chests)
-  local index = {}
-  for _, chest in ipairs(chests) do
-    local per = peripheral.wrap(chest)
-    for slot, item in pairs(per.list()) do
-      local name, count = item.name, item.count
-      index[name] = index[name] or { total=0, sources={} }
-      index[name].total = index[name].total + count
-      table.insert(index[name].sources, {
-        chest = chest, slot = slot, count = count
-      })
-    end
-  end
-  return index
-end
 
 -- Initialize rednet
 local function initRednet()
   for _, name in ipairs(peripheral.getNames()) do
     if peripheral.getType(name):match("modem") then
       rednet.open(name)
+      print("[DEBUG] rednet opened on " .. name)
       return true
     end
   end
@@ -105,8 +85,29 @@ if not initRednet() then
   error("No modem found")
 end
 
-local indexers = readIndexers(INDEXERS_FILE)
-print("Loaded "..#indexers.." indexers.")
+-- Discover indexers by broadcasting and waiting for replies
+local function discoverIndexers(reqId)
+  local ids = {}
+  rednet.broadcast({{ action = DISCOVERY_ACTION, requestId = reqId }}, NETWORK_PROTOCOL)
+  print("[DEBUG] Broadcasted indexer discovery for request " .. reqId)
+  local timer = os.startTimer(3)
+  while true do
+    local event, p1, p2, p3 = os.pullEvent()
+    if event == "rednet_message" then
+      local from, msg, proto = p1, p2, p3
+      local data = type(msg) == "table" and msg[1]
+      if proto == NETWORK_PROTOCOL and type(data) == "table" and data.action == DISCOVERY_REPLY and data.requestId == reqId then
+        ids[#ids + 1] = from
+        print(string.format("[DEBUG] Indexer %d responded to discovery", from))
+      end
+    elseif event == "timer" and p1 == timer then
+      break
+    end
+  end
+  return ids
+end
+
+print("Coordinator ready. Waiting for client requests...")
 
 local requestCounter = 0
 
@@ -118,18 +119,28 @@ while true do
     local reqId = requestCounter
     print(("Index request #%d from %d"):format(reqId, sender))
 
-    -- discover chests & partition
+    -- discover chests and indexers
     local allChests = findChests()
+    print(string.format("Found %d inventories on network", #allChests))
+    local indexers = discoverIndexers(reqId)
+    print(string.format("Discovered %d indexer(s)", #indexers))
+    if #indexers == 0 then
+      rednet.send(sender, {{ action = "index_response", requestId = reqId, data = {} }}, NETWORK_PROTOCOL)
+      print("No indexers available. Sent empty index.")
+      goto continue
+    end
+
     local chunks = partition(allChests, #indexers)
 
     -- dispatch to indexers
     for i, idxId in ipairs(indexers) do
       local payload = {
-        action     = "index",
-        requestId  = reqId,
-        chests     = chunks[i]
+        action    = "index",
+        requestId = reqId,
+        chests    = chunks[i]
       }
       rednet.send(idxId, {payload}, NETWORK_PROTOCOL)
+      print(string.format("[DEBUG] Sent %d chest(s) to indexer %d", #chunks[i], idxId))
     end
 
     -- collect partial results
@@ -151,8 +162,9 @@ while true do
 
           partials[from] = data.data
           waiting[from] = nil
-          print(("Received from %d, %d remaining"):format(from, countKeys(waiting)))
-        end
+          print(("[DEBUG] Received result from %d, %d remaining")
+            :format(from, countKeys(waiting)))
+      end
       elseif event=="timer" and p1==timer then
         print("Timeout waiting for indexers.")
         break
@@ -160,13 +172,14 @@ while true do
     end
 
     -- merge and reply
-    local merged = mergeIndices(partials)
+    local merged = buildGlobalIndex(partials)
     rednet.send(sender, {{
       action    = "index_response",
       requestId = reqId,
       data      = merged
     }}, NETWORK_PROTOCOL)
     print(("Replied to %d with merged index (%d items)"):format(sender, countKeys(merged)))
+::continue::
   end
 end
 
