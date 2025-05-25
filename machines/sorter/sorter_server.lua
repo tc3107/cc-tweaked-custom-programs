@@ -130,7 +130,7 @@ end
 -- Main listener loop
 while true do
     local senderId, data, proto = rednet.receive(protocol)
-    local msg = data[1]
+    local msg = type(data)=="table" and data[1]
     currentClientId = senderId
 
     if type(msg) == "table" then

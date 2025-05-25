@@ -47,7 +47,9 @@ local function relay(fromSide, toSide)
                 -- the message is broadcast on all open modems. This is
                 -- sufficient for a simple relay as we tag forwarded packets to
                 -- avoid loops.
-                rednet.send(senderId, newMessage, protocol)
+                -- Broadcast the packet so it reaches the other network.
+                -- rednet will transmit on all open modems.
+                rednet.broadcast(newMessage, protocol)
                 print("Forwarded from " .. fromSide .. " → " .. toSide .. " (protocol: " .. tostring(protocol) .. ")")
             else
                 print("Rejected looped message from " .. fromSide)
