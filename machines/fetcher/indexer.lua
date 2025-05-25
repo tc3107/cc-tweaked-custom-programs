@@ -6,11 +6,6 @@ local NETWORK_PROTOCOL = "inventoryNet"
 local DISCOVERY_ACTION = "discover_indexers"
 local DISCOVERY_REPLY  = "discover_response"
 
-local function countKeys(t)
-  local n = 0
-  for _ in pairs(t) do n = n + 1 end
-  return n
-end
 
 -- Initialize rednet by opening an attached modem
 local function initRednet()
@@ -81,7 +76,7 @@ while true do
 
     -- Build index for assigned inventories
     local result = buildIndex(data.chests)
-    print(string.format("[DEBUG] Indexed %d chest(s)", #data.chests))
+
     local reply = {
       action    = "index_result",
       requestId = data.requestId,
@@ -89,7 +84,7 @@ while true do
     }
     rednet.send(sender, {reply}, NETWORK_PROTOCOL)
     print(string.format("[INFO] index_result sent for req %d", data.requestId))
-    print(string.format("[DEBUG] Sent %d chest entries", countKeys(result)))
+
   else
     print("[WARN] Received unknown message type from " .. tostring(sender))
   end

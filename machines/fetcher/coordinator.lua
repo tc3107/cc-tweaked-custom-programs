@@ -89,7 +89,7 @@ end
 local function discoverIndexers(reqId)
   local ids = {}
   rednet.broadcast({{ action = DISCOVERY_ACTION, requestId = reqId }}, NETWORK_PROTOCOL)
-  print("[DEBUG] Broadcasted indexer discovery for request " .. reqId)
+
   local timer = os.startTimer(3)
   while true do
     local event, p1, p2, p3 = os.pullEvent()
@@ -98,7 +98,7 @@ local function discoverIndexers(reqId)
       local data = type(msg) == "table" and msg[1]
       if proto == NETWORK_PROTOCOL and type(data) == "table" and data.action == DISCOVERY_REPLY and data.requestId == reqId then
         ids[#ids + 1] = from
-        print(string.format("[DEBUG] Indexer %d responded to discovery", from))
+
       end
     elseif event == "timer" and p1 == timer then
       break

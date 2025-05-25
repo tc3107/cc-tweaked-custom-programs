@@ -11,12 +11,6 @@ local INDEX_TIMEOUT    = 65 -- seconds to wait for index response
 -- Trim whitespace
 local function trim(s) return (s or ""):match("^%s*(.-)%s*$") end
 
--- Count the number of keys in a table
-local function countKeys(t)
-  local n = 0
-  for _ in pairs(t) do n = n + 1 end
-  return n
-end
 
 -- Find and open any attached modem
 local function initRednet()
@@ -77,8 +71,7 @@ local function fetchItems(itemSources, qty, outName)
     if ok and ok > 0 then
       remaining = remaining - ok
       moved = moved + ok
-    else
-      print(string.format("[ERROR] Failed to move from %s slot %d", src.chest, src.slot))
+
     end
   end
   return moved
@@ -121,15 +114,7 @@ local function runPrompt(index)
       end
     end
   end
-end
 
--- MAIN
-if not initRednet() then
-  error("No modem found for rednet")
-end
-
-rednet.send(CENTRAL_ID, {{ action = "index_request" }}, NETWORK_PROTOCOL)
-print("[INFO] Requested global index from server, waiting up to " .. INDEX_TIMEOUT .. "s...")
 local sender, msg = rednet.receive(NETWORK_PROTOCOL, INDEX_TIMEOUT)
 if sender ~= CENTRAL_ID then
   print("[ERROR] Unexpected sender or timeout")
@@ -141,8 +126,5 @@ if not payload or payload.action ~= "index_response" then
   return
 end
 
-print("[DEBUG] Index payload received from server")
-
-print("[INFO] Index received with " .. tostring(countKeys(payload.data)) .. " item types")
 runPrompt(payload.data)
 
