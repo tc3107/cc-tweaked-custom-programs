@@ -159,6 +159,9 @@ local function main()
     end
   end
 
+  -- ** print how many indexers we found **
+  print("Indexers responded: " .. #indexers)
+  
   -- 2. find storage peripherals (network, minus outputChest)
   local periphs = findStorage()
   if #periphs == 0 then
