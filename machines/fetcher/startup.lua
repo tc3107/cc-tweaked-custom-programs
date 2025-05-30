@@ -1,1 +1,1 @@
-shell.run('bg indexer.lua')
+shell.run('indexer.lua')
