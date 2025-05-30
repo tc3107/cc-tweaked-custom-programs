@@ -1,29 +1,27 @@
--- client.lua: Distributed item fetch system
--- Broadcasts to indexers, gathers inventory data and fetches items
+-- fetch.lua: Distributed item fetch system 
 
 -- Configuration
+local outputChest = "minecraft:chest_"
 local identifyTimeout = 1     -- seconds to wait for indexer discovery
 local responseTimeout = 10    -- seconds to wait for scan results
-local outputChest = "minecraft:chest_X" -- set to placeholder for adjacent mode
 local protocol = "fetcher"
 
 -- Utility: open all attached modems
 local function openAllModems()
   local sides = {"left","right","top","bottom","front","back"}
   for _, side in ipairs(sides) do
-    if peripheral.getType(side) == "modem" then
-      if not rednet.isOpen(side) then
-        rednet.open(side)
-      end
+    if peripheral.getType(side) == "modem" and not rednet.isOpen(side) then
+      rednet.open(side)
     end
   end
 end
 
--- Utility: gather all storage peripherals on the network
+-- Utility: gather all storage peripherals on the network, except the output chest
 local function findStorage()
   local list = {}
   for _, name in ipairs(peripheral.getNames()) do
-    if name:match("minecraft:chest_") or name:match("minecraft:barrel_") then
+    if (name:match("minecraft:chest_") or name:match("minecraft:barrel_"))
+       and name ~= outputChest then
       table.insert(list, name)
     end
   end
@@ -73,23 +71,18 @@ local function buildIndex(storageMap)
   return index
 end
 
--- Determine output chest to use
+-- Determine output chest to use (network-only)
 local function getOutputChest()
-  if outputChest ~= "minecraft:chest_X" then
-    if peripheral.isPresent(outputChest) then
-      return outputChest
-    else
-      return nil
-    end
+  if outputChest == "" then
+    print("Error: outputChest not configured.")
+    return nil
   end
-  local sides = {"left","right","top","bottom","front","back"}
-  for _, side in ipairs(sides) do
-    local typ = peripheral.getType(side)
-    if typ and (typ:match("chest") or typ:match("barrel")) then
-      return side
-    end
+  if peripheral.isPresent(outputChest) then
+    return outputChest
+  else
+    print("Error: Network chest '"..outputChest.."' not found.")
+    return nil
   end
-  return nil
 end
 
 -- Capture simple item counts of a chest
@@ -130,8 +123,7 @@ local function retrieve(itemName, amount, index, out)
       table.insert(full, src)
     end
   end
-  local order = {partial, full}
-  for _, list in ipairs(order) do
+  for _, list in ipairs({partial, full}) do
     for _, src in ipairs(list) do
       if needed <= 0 then break end
       if getFreeSpace(out) <= 0 then
@@ -152,33 +144,29 @@ end
 -- Main logic
 local function main()
   openAllModems()
+
   local out = getOutputChest()
-  if not out then
-    print("Error: No valid output chest found.")
-    return
-  end
+  if not out then return end
 
   -- 1. discover indexers
   rednet.broadcast({type="identify"}, protocol)
   local indexers = {}
   local deadline = os.clock() + identifyTimeout
-  while true do
-    local now = os.clock()
-    if now >= deadline then break end
-    local id, msg, proto = rednet.receive(protocol, deadline - now)
+  while os.clock() < deadline do
+    local id, msg = rednet.receive(protocol, deadline - os.clock())
     if id and type(msg)=="table" and msg.type=="identify" then
       table.insert(indexers, msg.id or id)
     end
   end
 
-  -- 2. find storage peripherals
+  -- 2. find storage peripherals (network, minus outputChest)
   local periphs = findStorage()
   if #periphs == 0 then
     print("No storage peripherals found.")
     return
   end
 
-  -- 3. handle standalone mode
+  -- 3. handle standalone vs distributed
   local results = {}
   if #indexers == 0 then
     print("No indexers found. Running standalone scan...")
@@ -195,19 +183,17 @@ local function main()
     end
     results[os.getComputerID()] = data
   else
-    -- 4. distribute workload
+    -- distribute workload
     local tasks = assignWork(periphs, indexers)
     for id, list in pairs(tasks) do
       rednet.send(id, {type="scan", targets=list}, protocol)
     end
-
-    -- 5. collect responses
+    -- collect responses
     local remaining = {}
     for _, id in ipairs(indexers) do remaining[id] = true end
     local deadline2 = os.clock() + responseTimeout
     while next(remaining) and os.clock() < deadline2 do
-      local now = os.clock()
-      local id, msg = rednet.receive(protocol, deadline2 - now)
+      local id, msg = rednet.receive(protocol, deadline2 - os.clock())
       if id and type(msg)=="table" and msg.type=="scan" and remaining[msg.id] then
         results[msg.id] = msg.data
         remaining[msg.id] = nil
@@ -219,11 +205,11 @@ local function main()
     end
   end
 
-  -- 6. combine
+  -- combine and index
   local storageMap = mergeResults(results)
   local index = buildIndex(storageMap)
 
-  -- 7. ask user
+  -- user prompt
   write("Item name: ")
   local input = read()
   if not input then return end
@@ -240,6 +226,7 @@ local function main()
     print("Item not found")
     return
   end
+
   local available = index[targetName].total
   print("Available: "..available)
   write("Quantity: ")
@@ -261,4 +248,3 @@ local function main()
 end
 
 main()
-
